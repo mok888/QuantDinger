@@ -28,6 +28,7 @@
   <p align="center">
     <a href="https://www.quantdinger.com"><strong>官网</strong></a> ·
     <a href="https://ai.quantdinger.com"><strong>在线演示</strong></a> ·
+    <a href="CONTRIBUTORS.md"><strong>🌟 加入我们</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/issues"><strong>报告 Bug</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/discussions"><strong>讨论区</strong></a>
   </p>
@@ -45,6 +46,21 @@
     <a href="https://discord.gg/vwJ8zxFh9Q"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord" alt="Discord"></a>
     <a href="https://x.com/HenryCryption"><img src="https://img.shields.io/badge/X-Follow%20Us-000000?style=for-the-badge&logo=x" alt="X"></a>
   </p>
+</div>
+
+---
+
+<div align="center">
+
+### 🌟 **加入 QuantDinger DAO 社区 - 早期贡献者获得 QDT 代币！**
+
+[![加入贡献者](https://img.shields.io/badge/🌟_加入贡献者-获得_QDT_代币-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](CONTRIBUTORS.md)
+[![DAO社区](https://img.shields.io/badge/DAO社区-共建未来-4ECDC4?style=for-the-badge&logo=handshake&logoColor=white)](CONTRIBUTORS.md)
+
+**我们正在构建一个去中心化、社区驱动的交易平台。早期贡献者将获得 QDT 治理代币！**
+
+[📖 了解更多](CONTRIBUTORS.md) · [💬 加入 Telegram](https://t.me/quantdinger) · [🎮 加入 Discord](https://discord.gg/vwJ8zxFh9Q)
+
 </div>
 
 ---
@@ -463,6 +479,7 @@ npm run serve
 
 加入我们的全球社区进行策略分享和技术支持：
 
+- **🌟 想要贡献？**: [加入贡献者计划](CONTRIBUTORS.md) - 早期贡献者将获得 QDT 治理代币！
 - **Telegram (Group)**: [Join QuantDinger Telegram Group](https://t.me/quantdinger)
 - **Discord**: [Join Server](https://discord.gg/vwJ8zxFh9Q)
 - **YouTube**: [@quantdinger](https://youtube.com/@quantdinger)

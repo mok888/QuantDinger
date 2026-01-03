@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing to **QuantDinger**! This guide explains how to report issues, propose changes, and submit pull requests.
 
+> 🌟 **Want to join our DAO community?** Check out [CONTRIBUTORS.md](CONTRIBUTORS.md) to learn about early contributor rewards, including QDT governance token airdrops!
+
 ---
 
 ## 1) Quick links

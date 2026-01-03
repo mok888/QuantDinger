@@ -28,6 +28,7 @@
   <p align="center">
     <a href="https://www.quantdinger.com"><strong>ウェブサイト</strong></a> ·
     <a href="https://ai.quantdinger.com"><strong>ライブデモ</strong></a> ·
+    <a href="CONTRIBUTORS.md"><strong>🌟 参加する</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/issues"><strong>バグ報告</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/discussions"><strong>ディスカッション</strong></a>
   </p>
@@ -45,6 +46,21 @@
     <a href="https://discord.gg/vwJ8zxFh9Q"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord" alt="Discord"></a>
     <a href="https://x.com/HenryCryption"><img src="https://img.shields.io/badge/X-Follow%20Us-000000?style=for-the-badge&logo=x" alt="X"></a>
   </p>
+</div>
+
+---
+
+<div align="center">
+
+### 🌟 **QuantDinger DAOコミュニティに参加 - 早期貢献者はQDTトークンを獲得！**
+
+[![貢献者に参加](https://img.shields.io/badge/🌟_貢献者に参加-QDTトークン獲得-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](CONTRIBUTORS.md)
+[![DAOコミュニティ](https://img.shields.io/badge/DAOコミュニティ-共に構築-4ECDC4?style=for-the-badge&logo=handshake&logoColor=white)](CONTRIBUTORS.md)
+
+**分散型、コミュニティ主導の取引プラットフォームを構築中です。早期貢献者はQDTガバナンストークンを受け取ります！**
+
+[📖 詳細を見る](CONTRIBUTORS.md) · [💬 Telegramに参加](https://t.me/quantdinger) · [🎮 Discordに参加](https://discord.gg/vwJ8zxFh9Q)
+
 </div>
 
 ---
@@ -419,6 +435,7 @@ npm run serve
 
 戦略の共有や技術サポートのために、グローバルコミュニティに参加しましょう：
 
+- **🌟 貢献したいですか？**: [貢献者プログラムに参加](CONTRIBUTORS.md) - 早期貢献者はQDTガバナンストークンを受け取ります！
 - **Telegram (Group)**: [Join QuantDinger Telegram Group](https://t.me/quantdinger)
 - **Discord**: [サーバーに参加](https://discord.gg/vwJ8zxFh9Q)
 - **YouTube**: [@quantdinger](https://youtube.com/@quantdinger)

@@ -28,6 +28,7 @@
   <p align="center">
     <a href="https://www.quantdinger.com"><strong>웹사이트</strong></a> ·
     <a href="https://ai.quantdinger.com"><strong>라이브 데모</strong></a> ·
+    <a href="CONTRIBUTORS.md"><strong>🌟 참여하기</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/issues"><strong>버그 신고</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/discussions"><strong>토론</strong></a>
   </p>
@@ -45,6 +46,21 @@
     <a href="https://discord.gg/vwJ8zxFh9Q"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord" alt="Discord"></a>
     <a href="https://x.com/HenryCryption"><img src="https://img.shields.io/badge/X-Follow%20Us-000000?style=for-the-badge&logo=x" alt="X"></a>
   </p>
+</div>
+
+---
+
+<div align="center">
+
+### 🌟 **QuantDinger DAO 커뮤니티에 참여하세요 - 초기 기여자는 QDT 토큰을 받습니다!**
+
+[![기여자 참여](https://img.shields.io/badge/🌟_기여자_참여-QDT_토큰_획득-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](CONTRIBUTORS.md)
+[![DAO_커뮤니티](https://img.shields.io/badge/DAO_커뮤니티-함께_구축-4ECDC4?style=for-the-badge&logo=handshake&logoColor=white)](CONTRIBUTORS.md)
+
+**분산형 커뮤니티 주도 거래 플랫폼을 구축하고 있습니다. 초기 기여자는 QDT 거버넌스 토큰을 받습니다!**
+
+[📖 자세히 보기](CONTRIBUTORS.md) · [💬 Telegram 참여](https://t.me/quantdinger) · [🎮 Discord 참여](https://discord.gg/vwJ8zxFh9Q)
+
 </div>
 
 ---
@@ -432,6 +448,7 @@ npm run serve
 
 전략 공유 및 기술 지원을 위해 글로벌 커뮤니티에 참여하십시오:
 
+- **🌟 기여하고 싶으신가요？**: [기여자 프로그램 참여](CONTRIBUTORS.md) - 초기 기여자는 QDT 거버넌스 토큰을 받습니다！
 - **Telegram (Group)**: [Join QuantDinger Telegram Group](https://t.me/quantdinger)
 - **Discord**: [서버 참여](https://discord.gg/vwJ8zxFh9Q)
 - **YouTube**: [@quantdinger](https://youtube.com/@quantdinger)

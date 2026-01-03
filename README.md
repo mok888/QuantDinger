@@ -28,6 +28,7 @@
   <p align="center">
     <a href="https://www.quantdinger.com"><strong>Website</strong></a> ·
     <a href="https://ai.quantdinger.com"><strong>Live Demo</strong></a> ·
+    <a href="CONTRIBUTORS.md"><strong>🌟 Join Us</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/issues"><strong>Report Bug</strong></a> ·
     <a href="https://github.com/brokermr810/QuantDinger/discussions"><strong>Discussions</strong></a>
   </p>
@@ -45,6 +46,21 @@
     <a href="https://discord.gg/vwJ8zxFh9Q"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord" alt="Discord"></a>
     <a href="https://x.com/HenryCryption"><img src="https://img.shields.io/badge/X-Follow%20Us-000000?style=for-the-badge&logo=x" alt="X"></a>
   </p>
+</div>
+
+---
+
+<div align="center">
+
+### 🌟 **Join the QuantDinger DAO Community - Early Contributors Get QDT Tokens!**
+
+[![Join Contributors](https://img.shields.io/badge/🌟_Join_Contributors-Get_QDT_Tokens-FF6B6B?style=for-the-badge&logo=github&logoColor=white)](CONTRIBUTORS.md)
+[![DAO Community](https://img.shields.io/badge/DAO_Community-Build_Together-4ECDC4?style=for-the-badge&logo=handshake&logoColor=white)](CONTRIBUTORS.md)
+
+**We're building a decentralized, community-driven trading platform. Early contributors receive QDT governance tokens!**
+
+[📖 Learn More](CONTRIBUTORS.md) · [💬 Join Telegram](https://t.me/quantdinger) · [🎮 Join Discord](https://discord.gg/vwJ8zxFh9Q)
+
 </div>
 
 ---
@@ -595,6 +611,7 @@ Licensed under the **Apache License 2.0**. See `LICENSE`.
 
 Join our global community for strategy sharing and technical support:
 
+- **🌟 Want to Contribute?**: [Join as a Contributor](CONTRIBUTORS.md) - Early contributors receive QDT governance tokens!
 - **Telegram (Group)**: [Join QuantDinger Telegram Group](https://t.me/quantdinger)
 - **Discord**: [Join Server](https://discord.gg/vwJ8zxFh9Q)
 - **YouTube**: [@quantdinger](https://youtube.com/@quantdinger)
