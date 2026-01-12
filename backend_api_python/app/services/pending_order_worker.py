@@ -39,6 +39,9 @@ from app.services.live_trading.symbols import to_gate_currency_pair
 from app.utils.db import get_db_connection
 from app.utils.logger import get_logger
 
+# Lazy import IBKR to avoid ImportError if ib_insync not installed
+IBKRClient = None
+
 logger = get_logger(__name__)
 
 
@@ -691,6 +694,29 @@ class PendingOrderWorker:
             self._mark_failed(order_id=order_id, error=f"create_client_failed:{e}")
             _console_print(f"[worker] create_client_failed: strategy_id={strategy_id} pending_id={order_id} err={e}")
             _notify_live_best_effort(status="failed", error=f"create_client_failed:{e}")
+            return
+
+        # Check if this is an IBKR client (US/HK stocks)
+        global IBKRClient
+        if IBKRClient is None:
+            try:
+                from app.services.ibkr_trading import IBKRClient as _IBKRClient
+                IBKRClient = _IBKRClient
+            except ImportError:
+                pass
+
+        if IBKRClient is not None and isinstance(client, IBKRClient):
+            # Execute IBKR order (separate flow for stocks)
+            self._execute_ibkr_order(
+                order_id=order_id,
+                order_row=order_row,
+                payload=payload,
+                client=client,
+                strategy_id=strategy_id,
+                exchange_config=exchange_config,
+                _notify_live_best_effort=_notify_live_best_effort,
+                _console_print=_console_print,
+            )
             return
 
         def _make_client_oid(phase: str = "") -> str:
@@ -1538,6 +1564,143 @@ class PendingOrderWorker:
             price_hint=avg_price if avg_price > 0 else ref_price,
             amount_hint=filled if filled > 0 else amount,
         )
+
+    def _execute_ibkr_order(
+        self,
+        *,
+        order_id: int,
+        order_row: Dict[str, Any],
+        payload: Dict[str, Any],
+        client,  # IBKRClient instance
+        strategy_id: int,
+        exchange_config: Dict[str, Any],
+        _notify_live_best_effort,
+        _console_print,
+    ) -> None:
+        """
+        Execute order via Interactive Brokers for US/HK stocks.
+
+        Simplified flow compared to crypto (no maker->market fallback):
+        - Place market order directly
+        - Wait for fill
+        - Record trade
+        """
+        signal_type = payload.get("signal_type") or order_row.get("signal_type")
+        symbol = payload.get("symbol") or order_row.get("symbol")
+        amount = float(payload.get("amount") or order_row.get("amount") or 0.0)
+        ref_price = float(payload.get("ref_price") or payload.get("price") or order_row.get("price") or 0.0)
+
+        sig = str(signal_type or "").strip().lower()
+
+        # Stocks: no short selling in basic implementation
+        if "short" in sig:
+            self._mark_failed(order_id=order_id, error="ibkr_stock_short_not_supported")
+            _console_print(f"[worker] IBKR order rejected: strategy_id={strategy_id} pending_id={order_id} short not supported")
+            _notify_live_best_effort(status="failed", error="ibkr_stock_short_not_supported")
+            return
+
+        # Map signal to action
+        if sig in ("open_long", "add_long"):
+            action = "buy"
+        elif sig in ("close_long", "reduce_long"):
+            action = "sell"
+        else:
+            self._mark_failed(order_id=order_id, error=f"ibkr_unsupported_signal:{signal_type}")
+            _console_print(f"[worker] IBKR order rejected: strategy_id={strategy_id} pending_id={order_id} unsupported signal {signal_type}")
+            _notify_live_best_effort(status="failed", error=f"ibkr_unsupported_signal:{signal_type}")
+            return
+
+        # Get market type (USStock or HShare)
+        market_type = str(
+            payload.get("market_type") or
+            payload.get("market_category") or
+            exchange_config.get("market_type") or
+            exchange_config.get("market_category") or
+            "USStock"
+        ).strip()
+
+        try:
+            # Place market order via IBKR
+            result = client.place_market_order(
+                symbol=symbol,
+                action=action,
+                quantity=amount,
+                market_type=market_type,
+            )
+
+            if not result.success:
+                self._mark_failed(order_id=order_id, error=f"ibkr_order_failed:{result.message}")
+                _console_print(f"[worker] IBKR order failed: strategy_id={strategy_id} pending_id={order_id} err={result.message}")
+                _notify_live_best_effort(status="failed", error=f"ibkr_order_failed:{result.message}")
+                return
+
+            filled = float(result.filled or 0.0)
+            avg_price = float(result.avg_price or 0.0)
+            exchange_order_id = str(result.order_id or "")
+
+            # Use ref_price if avg_price not available
+            if avg_price <= 0 and ref_price > 0:
+                avg_price = ref_price
+            if filled <= 0:
+                filled = amount
+
+            executed_at = int(time.time())
+
+            # Mark order as sent
+            self._mark_sent(
+                order_id=order_id,
+                note="ibkr_order_sent",
+                exchange_id="ibkr",
+                exchange_order_id=exchange_order_id,
+                exchange_response_json=json.dumps(result.raw or {}, ensure_ascii=False),
+                filled=filled,
+                avg_price=avg_price,
+                executed_at=executed_at,
+            )
+            _console_print(f"[worker] IBKR order sent: strategy_id={strategy_id} pending_id={order_id} order_id={exchange_order_id} filled={filled} avg={avg_price}")
+
+            # Record trade and update position
+            try:
+                if filled > 0 and avg_price > 0:
+                    logger.info(
+                        f"IBKR record begin: pending_id={order_id} strategy_id={strategy_id} symbol={symbol} "
+                        f"signal={signal_type} filled={filled} avg_price={avg_price}"
+                    )
+                    profit, _pos = apply_fill_to_local_position(
+                        strategy_id=strategy_id,
+                        symbol=str(symbol),
+                        signal_type=str(signal_type),
+                        filled=filled,
+                        avg_price=avg_price,
+                    )
+                    record_trade(
+                        strategy_id=strategy_id,
+                        symbol=str(symbol),
+                        trade_type=str(signal_type),
+                        price=avg_price,
+                        amount=filled,
+                        commission=0.0,  # IBKR commission is complex, skip for now
+                        commission_ccy="USD",
+                        profit=profit,
+                    )
+                    logger.info(f"IBKR record done: pending_id={order_id} strategy_id={strategy_id} symbol={symbol}")
+            except Exception as e:
+                logger.warning(f"IBKR record_trade/update_position failed: pending_id={order_id}, err={e}")
+
+            # Notify success
+            _notify_live_best_effort(
+                status="sent",
+                exchange_id="ibkr",
+                exchange_order_id=exchange_order_id,
+                price_hint=avg_price,
+                amount_hint=filled,
+            )
+
+        except Exception as e:
+            logger.error(f"IBKR order execution failed: pending_id={order_id}, strategy_id={strategy_id}, err={e}")
+            self._mark_failed(order_id=order_id, error=f"ibkr_exception:{e}")
+            _console_print(f"[worker] IBKR order exception: strategy_id={strategy_id} pending_id={order_id} err={e}")
+            _notify_live_best_effort(status="failed", error=str(e))
 
     def _mark_sent(
         self,

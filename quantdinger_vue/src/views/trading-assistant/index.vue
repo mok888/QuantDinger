@@ -874,14 +874,14 @@
               <a-form-item :label="$t('trading-assistant.form.executionMode')">
                 <a-radio-group
                   v-decorator="['execution_mode', { initialValue: 'signal' }]"
-                  :disabled="!isCryptoMarket"
+                  :disabled="!canUseLiveTrading"
                   @change="onExecutionModeChange"
                 >
                   <a-radio value="signal">{{ $t('trading-assistant.form.executionModeSignal') }}</a-radio>
-                  <a-radio value="live" :disabled="!isCryptoMarket">{{ $t('trading-assistant.form.executionModeLive') }}</a-radio>
+                  <a-radio value="live" :disabled="!canUseLiveTrading">{{ $t('trading-assistant.form.executionModeLive') }}</a-radio>
                 </a-radio-group>
-                <div v-if="!isCryptoMarket" class="form-item-hint" style="color: #ff9800;">
-                  {{ $t('trading-assistant.form.liveTradingCryptoOnlyHint') }}
+                <div v-if="!canUseLiveTrading" class="form-item-hint" style="color: #ff9800;">
+                  {{ $t('trading-assistant.form.liveTradingNotSupportedHint') }}
                 </div>
               </a-form-item>
 
@@ -950,10 +950,10 @@
                 />
               </a-form-item>
 
-              <a-divider v-if="executionModeUi === 'live' && isCryptoMarket" />
+              <a-divider v-if="executionModeUi === 'live' && canUseLiveTrading" />
 
-              <!-- Live trading: exchange credentials (crypto only) -->
-              <div v-if="executionModeUi === 'live' && isCryptoMarket">
+              <!-- Live trading: exchange credentials -->
+              <div v-if="executionModeUi === 'live' && canUseLiveTrading">
                 <a-alert
                   type="info"
                   show-icon
@@ -962,98 +962,179 @@
                   :description="$t('trading-assistant.form.liveTradingConfigHint')"
                 />
 
-                <a-form-item :label="$t('trading-assistant.form.savedCredential')">
-                  <a-select
-                    v-decorator="['credential_id', { getValueFromEvent: (val) => val || undefined }]"
-                    :placeholder="$t('trading-assistant.placeholders.selectSavedCredential')"
-                    allow-clear
-                    show-search
-                    option-filter-prop="children"
-                    :loading="loadingExchangeCredentials"
-                    @change="handleCredentialSelectChange"
-                  >
-                    <a-select-option
-                      v-for="cred in exchangeCredentials"
-                      :key="cred.id"
-                      :value="cred.id"
+                <!-- ========== Broker Configuration (US/HK Stocks) ========== -->
+                <template v-if="isIBKRMarket">
+                  <a-form-item :label="$t('trading-assistant.form.broker')">
+                    <a-select
+                      v-decorator="['broker_id', {
+                        initialValue: 'ibkr',
+                        rules: [{ required: true, message: $t('trading-assistant.validation.brokerRequired') }]
+                      }]"
+                      :placeholder="$t('trading-assistant.placeholders.selectBroker')"
+                      :getPopupContainer="getModalPopupContainer"
+                      @change="handleBrokerSelectChange"
                     >
-                      {{ formatCredentialLabel(cred) }}
-                    </a-select-option>
-                  </a-select>
-                  <div class="form-item-hint">{{ $t('trading-assistant.form.savedCredentialHint') }}</div>
-                </a-form-item>
+                      <a-select-option
+                        v-for="broker in brokerOptions"
+                        :key="broker.value"
+                        :value="broker.value"
+                      >
+                        {{ broker.displayName }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
 
-                <a-form-item :label="$t('trading-assistant.form.exchange')">
-                  <a-select
-                    v-decorator="['exchange_id', {
-                      rules: [{ required: true, message: $t('trading-assistant.validation.exchangeRequired') }],
-                      getValueFromEvent: (val) => val || undefined
-                    }]"
-                    :placeholder="$t('trading-assistant.placeholders.selectExchange')"
-                    allow-clear
-                    show-search
-                    option-filter-prop="children"
-                    @change="handleExchangeSelectChange"
-                  >
-                    <a-select-option
-                      v-for="exchange in formattedExchangeOptions"
-                      :key="exchange.value"
-                      :value="exchange.value"
+                  <!-- IBKR specific configuration -->
+                  <template v-if="currentBrokerId === 'ibkr'">
+                    <a-alert
+                      type="info"
+                      show-icon
+                      style="margin-bottom: 16px;"
+                      :message="$t('trading-assistant.form.ibkrConnectionTitle')"
+                      :description="$t('trading-assistant.form.ibkrConnectionHint')"
+                    />
+
+                    <a-form-item :label="$t('trading-assistant.form.ibkrHost')">
+                      <a-input
+                        v-decorator="['ibkr_host', { initialValue: '127.0.0.1' }]"
+                        placeholder="127.0.0.1"
+                        @change="handleApiConfigChange"
+                      />
+                    </a-form-item>
+
+                    <a-form-item :label="$t('trading-assistant.form.ibkrPort')">
+                      <a-input-number
+                        v-decorator="['ibkr_port', { initialValue: 7497 }]"
+                        placeholder="7497"
+                        :min="1"
+                        :max="65535"
+                        style="width: 100%"
+                        @change="handleApiConfigChange"
+                      />
+                      <div class="form-item-hint">{{ $t('trading-assistant.form.ibkrPortHint') }}</div>
+                    </a-form-item>
+
+                    <a-form-item :label="$t('trading-assistant.form.ibkrClientId')">
+                      <a-input-number
+                        v-decorator="['ibkr_client_id', { initialValue: 1 }]"
+                        placeholder="1"
+                        :min="1"
+                        :max="999"
+                        style="width: 100%"
+                        @change="handleApiConfigChange"
+                      />
+                    </a-form-item>
+
+                    <a-form-item :label="$t('trading-assistant.form.ibkrAccount')">
+                      <a-input
+                        v-decorator="['ibkr_account', { initialValue: '' }]"
+                        :placeholder="$t('trading-assistant.placeholders.ibkrAccount')"
+                        @change="handleApiConfigChange"
+                      />
+                      <div class="form-item-hint">{{ $t('trading-assistant.form.ibkrAccountHint') }}</div>
+                    </a-form-item>
+                  </template>
+
+                  <!-- Future broker configurations can be added here -->
+                  <!-- <template v-else-if="currentBrokerId === 'futu'">...</template> -->
+                </template>
+
+                <!-- ========== Crypto Exchange Configuration ========== -->
+                <template v-else>
+                  <a-form-item :label="$t('trading-assistant.form.savedCredential')">
+                    <a-select
+                      v-decorator="['credential_id', { getValueFromEvent: (val) => val || undefined }]"
+                      :placeholder="$t('trading-assistant.placeholders.selectSavedCredential')"
+                      allow-clear
+                      show-search
+                      option-filter-prop="children"
+                      :loading="loadingExchangeCredentials"
+                      @change="handleCredentialSelectChange"
                     >
-                      {{ exchange.displayName }}
-                    </a-select-option>
-                  </a-select>
-                </a-form-item>
+                      <a-select-option
+                        v-for="cred in exchangeCredentials"
+                        :key="cred.id"
+                        :value="cred.id"
+                      >
+                        {{ formatCredentialLabel(cred) }}
+                      </a-select-option>
+                    </a-select>
+                    <div class="form-item-hint">{{ $t('trading-assistant.form.savedCredentialHint') }}</div>
+                  </a-form-item>
 
-                <a-form-item :label="$t('trading-assistant.form.apiKey')">
-                  <a-input-password
-                    v-decorator="['api_key', { rules: [{ required: true, message: $t('trading-assistant.validation.apiKeyRequired') }] }]"
-                    :placeholder="$t('trading-assistant.placeholders.inputApiKey')"
-                    autocomplete="new-password"
-                    @change="handleApiConfigChange"
-                  />
-                </a-form-item>
+                  <a-form-item :label="$t('trading-assistant.form.exchange')">
+                    <a-select
+                      v-decorator="['exchange_id', {
+                        rules: [{ required: true, message: $t('trading-assistant.validation.exchangeRequired') }],
+                        getValueFromEvent: (val) => val || undefined
+                      }]"
+                      :placeholder="$t('trading-assistant.placeholders.selectExchange')"
+                      allow-clear
+                      show-search
+                      option-filter-prop="children"
+                      @change="handleExchangeSelectChange"
+                    >
+                      <a-select-option
+                        v-for="exchange in cryptoExchangeOptions"
+                        :key="exchange.value"
+                        :value="exchange.value"
+                      >
+                        {{ exchange.displayName }}
+                      </a-select-option>
+                    </a-select>
+                  </a-form-item>
 
-                <a-form-item :label="$t('trading-assistant.form.secretKey')">
-                  <a-input-password
-                    v-decorator="['secret_key', { rules: [{ required: true, message: $t('trading-assistant.validation.secretKeyRequired') }] }]"
-                    :placeholder="$t('trading-assistant.placeholders.inputSecretKey')"
-                    autocomplete="new-password"
-                    @change="handleApiConfigChange"
-                  />
-                </a-form-item>
+                  <a-form-item :label="$t('trading-assistant.form.apiKey')">
+                    <a-input-password
+                      v-decorator="['api_key', { rules: [{ required: true, message: $t('trading-assistant.validation.apiKeyRequired') }] }]"
+                      :placeholder="$t('trading-assistant.placeholders.inputApiKey')"
+                      autocomplete="new-password"
+                      @change="handleApiConfigChange"
+                    />
+                  </a-form-item>
 
-                <a-form-item
-                  v-if="needsPassphrase"
-                  :label="$t('trading-assistant.form.passphrase')"
-                >
-                  <a-input-password
-                    v-decorator="['passphrase', { rules: [{ required: true, message: $t('trading-assistant.validation.passphraseRequired') }] }]"
-                    :placeholder="$t('trading-assistant.placeholders.inputPassphrase')"
-                    autocomplete="new-password"
-                    @change="handleApiConfigChange"
-                  />
-                </a-form-item>
+                  <a-form-item :label="$t('trading-assistant.form.secretKey')">
+                    <a-input-password
+                      v-decorator="['secret_key', { rules: [{ required: true, message: $t('trading-assistant.validation.secretKeyRequired') }] }]"
+                      :placeholder="$t('trading-assistant.placeholders.inputSecretKey')"
+                      autocomplete="new-password"
+                      @change="handleApiConfigChange"
+                    />
+                  </a-form-item>
 
-                <a-form-item>
-                  <a-checkbox
-                    v-decorator="['save_credential', { valuePropName: 'checked', initialValue: false }]"
-                    @change="onSaveCredentialChange"
+                  <a-form-item
+                    v-if="needsPassphrase"
+                    :label="$t('trading-assistant.form.passphrase')"
                   >
-                    {{ $t('trading-assistant.form.saveCredential') }}
-                  </a-checkbox>
-                </a-form-item>
+                    <a-input-password
+                      v-decorator="['passphrase', { rules: [{ required: true, message: $t('trading-assistant.validation.passphraseRequired') }] }]"
+                      :placeholder="$t('trading-assistant.placeholders.inputPassphrase')"
+                      autocomplete="new-password"
+                      @change="handleApiConfigChange"
+                    />
+                  </a-form-item>
 
-                <a-form-item
-                  v-if="saveCredentialUi"
-                  :label="$t('trading-assistant.form.credentialName')"
-                >
-                  <a-input
-                    v-decorator="['credential_name']"
-                    :placeholder="$t('trading-assistant.placeholders.inputCredentialName')"
-                  />
-                </a-form-item>
+                  <a-form-item>
+                    <a-checkbox
+                      v-decorator="['save_credential', { valuePropName: 'checked', initialValue: false }]"
+                      @change="onSaveCredentialChange"
+                    >
+                      {{ $t('trading-assistant.form.saveCredential') }}
+                    </a-checkbox>
+                  </a-form-item>
 
+                  <a-form-item
+                    v-if="saveCredentialUi"
+                    :label="$t('trading-assistant.form.credentialName')"
+                  >
+                    <a-input
+                      v-decorator="['credential_name']"
+                      :placeholder="$t('trading-assistant.placeholders.inputCredentialName')"
+                    />
+                  </a-form-item>
+                </template>
+
+                <!-- Test Connection Button (shared by both IBKR and Crypto) -->
                 <a-form-item>
                   <a-button
                     type="default"
@@ -1119,8 +1200,7 @@ const CRYPTO_SYMBOLS = [
   'LINK/USDT', 'UNI/USDT', 'LTC/USDT', 'ATOM/USDT', 'ETC/USDT'
 ]
 
-// 交易所选项（前端仅展示后端已适配/支持的交易所）
-// 注意：这些标签在组件中会通过计算属性动态生成，以支持多语言
+// Crypto exchange options
 const EXCHANGE_OPTIONS = [
   { value: 'binance', labelKey: 'binance' },
   { value: 'okx', labelKey: 'okx' },
@@ -1131,6 +1211,16 @@ const EXCHANGE_OPTIONS = [
   { value: 'kucoin', labelKey: 'kucoin' },
   { value: 'gate', labelKey: 'gate' },
   { value: 'bitfinex', labelKey: 'bitfinex' }
+]
+
+// Traditional broker options (US/HK stocks) - extensible for future brokers
+const BROKER_OPTIONS = [
+  { value: 'ibkr', labelKey: 'ibkr', name: 'Interactive Brokers' }
+  // Future brokers can be added here:
+  // { value: 'td', labelKey: 'td', name: 'TD Ameritrade' },
+  // { value: 'schwab', labelKey: 'schwab', name: 'Charles Schwab' },
+  // { value: 'futu', labelKey: 'futu', name: 'Futu (富途)' },
+  // { value: 'tiger', labelKey: 'tiger', name: 'Tiger Brokers (老虎证券)' },
 ]
 
 export default {
@@ -1145,8 +1235,12 @@ export default {
       return this.navTheme === 'dark' || this.navTheme === 'realdark'
     },
     needsPassphrase () {
-      // 需要 passphrase 的交易所
+      // Exchanges that require passphrase
       return ['okx', 'okex', 'coinbaseexchange', 'kucoin', 'bitget'].includes(this.currentExchangeId)
+    },
+    // Check if current market uses IBKR (US Stock / HK Stock)
+    isIBKRMarket () {
+      return ['USStock', 'HShare'].includes(this.selectedMarketCategory)
     },
     // 预处理交易所列表，包含显示名称，提升性能
     formattedExchangeOptions () {
@@ -1199,6 +1293,75 @@ export default {
       // Always depend on selectedMarketCategory to make UI reactive.
       const cat = this.selectedMarketCategory || 'Crypto'
       return String(cat).toLowerCase() === 'crypto'
+    },
+    // Check if selected market supports live trading (Crypto or USStock/HShare with IBKR)
+    canUseLiveTrading () {
+      const cat = this.selectedMarketCategory || 'Crypto'
+      // Crypto always supports live trading via crypto exchanges
+      if (String(cat).toLowerCase() === 'crypto') {
+        return true
+      }
+      // USStock/HShare can use IBKR for live trading
+      if (['USStock', 'HShare'].includes(cat)) {
+        return true
+      }
+      return false
+    },
+    // Check if current market + exchange combination supports live trading
+    isLiveTradingAvailable () {
+      const cat = this.selectedMarketCategory || 'Crypto'
+      const exchangeId = this.currentExchangeId || ''
+      // Crypto markets use crypto exchanges
+      if (String(cat).toLowerCase() === 'crypto') {
+        return ['binance', 'okx', 'bitget', 'bybit', 'coinbaseexchange', 'kraken', 'kucoin', 'gate', 'bitfinex'].includes(exchangeId)
+      }
+      // USStock/HShare use IBKR
+      if (['USStock', 'HShare'].includes(cat)) {
+        return exchangeId === 'ibkr'
+      }
+      return false
+    },
+    // Broker options for US/HK stocks (with i18n support)
+    brokerOptions () {
+      return BROKER_OPTIONS.map(broker => {
+        let label = ''
+        try {
+          const translationKey = `trading-assistant.brokerNames.${broker.labelKey}`
+          const translated = this.$t(translationKey)
+          if (translated !== translationKey) {
+            label = translated
+          }
+        } catch (e) {}
+        if (!label) {
+          label = broker.name || broker.value.toUpperCase()
+        }
+        return {
+          ...broker,
+          displayName: label
+        }
+      })
+    },
+    // Crypto exchange options only
+    cryptoExchangeOptions () {
+      return EXCHANGE_OPTIONS.map(exchange => {
+          let label = ''
+          try {
+            if (exchange.labelKey) {
+              const translationKey = `trading-assistant.exchangeNames.${exchange.labelKey}`
+              const translated = this.$t(translationKey)
+              if (translated !== translationKey) {
+                label = translated
+              }
+            }
+          } catch (e) {}
+          if (!label) {
+            label = exchange.value.charAt(0).toUpperCase() + exchange.value.slice(1)
+          }
+          return {
+            ...exchange,
+            displayName: label
+          }
+        })
     },
     // 策略分组显示
     groupedStrategies () {
@@ -1260,6 +1423,7 @@ export default {
       watchlist: [],
       exchangeOptions: EXCHANGE_OPTIONS,
       currentExchangeId: '',
+      currentBrokerId: 'ibkr',
       testing: false,
       testResult: null,
       connectionTestResult: null,
@@ -1338,19 +1502,27 @@ export default {
       // Keep selection reactive for Step 3 execution gating
       this.selectedMarketCategory = market || 'Crypto'
 
-      // Non-crypto markets cannot use live trading. Force back to signal to keep UI consistent.
-      if (this.selectedMarketCategory !== 'Crypto') {
+      // Markets without live trading support: force back to signal mode
+      // Crypto, USStock, HShare support live trading; others do not
+      const supportsLiveTrading = ['Crypto', 'USStock', 'HShare'].includes(this.selectedMarketCategory)
+      if (!supportsLiveTrading) {
         this.executionModeUi = 'signal'
         try {
           this.form && this.form.setFieldsValue && this.form.setFieldsValue({ execution_mode: 'signal' })
         } catch (e) {}
       }
+
+      // Clear exchange selection when market changes (different markets use different exchanges)
+      this.currentExchangeId = ''
+      try {
+        this.form && this.form.setFieldsValue && this.form.setFieldsValue({ exchange_id: undefined })
+      } catch (e) {}
     },
     handleMultiSymbolChange (vals) {
-      // vals: 数组，如 ["Crypto:BTC/USDT", "Crypto:ETH/USDT"]
+      // vals: array like ["Crypto:BTC/USDT", "Crypto:ETH/USDT"]
       this.selectedSymbols = vals || []
 
-      // 根据选中的币种更新市场类型
+      // Update market type based on selected symbols
       if (vals && vals.length > 0) {
         const firstVal = vals[0]
         if (typeof firstVal === 'string' && firstVal.includes(':')) {
@@ -1360,13 +1532,20 @@ export default {
         }
       }
 
-      // Non-crypto markets cannot use live trading
-      if (this.selectedMarketCategory !== 'Crypto') {
+      // Markets without live trading support: force back to signal mode
+      const supportsLiveTrading = ['Crypto', 'USStock', 'HShare'].includes(this.selectedMarketCategory)
+      if (!supportsLiveTrading) {
         this.executionModeUi = 'signal'
         try {
           this.form && this.form.setFieldsValue && this.form.setFieldsValue({ execution_mode: 'signal' })
         } catch (e) {}
       }
+
+      // Clear exchange selection when market changes
+      this.currentExchangeId = ''
+      try {
+        this.form && this.form.setFieldsValue && this.form.setFieldsValue({ exchange_id: undefined })
+      } catch (e) {}
     },
     async loadExchangeCredentials () {
       this.loadingExchangeCredentials = true
@@ -1452,7 +1631,8 @@ export default {
     onExecutionModeChange (e) {
       const v = e && e.target ? e.target.value : e
       this.executionModeUi = v || 'signal'
-      if (!this.isCryptoMarket && this.executionModeUi !== 'signal') {
+      // If market doesn't support live trading, force signal mode
+      if (!this.canUseLiveTrading && this.executionModeUi !== 'signal') {
         this.executionModeUi = 'signal'
         try {
           this.form && this.form.setFieldsValue && this.form.setFieldsValue({ execution_mode: 'signal' })
@@ -1510,6 +1690,7 @@ export default {
       this.strategyType = 'indicator'
       this.currentStep = 0
       this.currentExchangeId = ''
+      this.currentBrokerId = 'ibkr'
       this.selectedIndicator = null
       this.testResult = null
       this.connectionTestResult = null
@@ -1521,7 +1702,7 @@ export default {
       this.entryPctMaxUi = 100
       this.aiFilterEnabledUi = false
       this.selectedMarketCategory = 'Crypto'
-      this.selectedSymbols = [] // 重置多币种选择
+      this.selectedSymbols = []
 
       this.form.resetFields()
       this.form.setFieldsValue({
@@ -1683,36 +1864,49 @@ export default {
         }
       }
 
-      // 加载交易所配置
+      // Load exchange/broker configuration
       if (strategy.exchange_config) {
-        this.currentExchangeId = strategy.exchange_config.exchange_id || ''
-
-        // Only set form fields if live trading is enabled (fields are rendered)
-        // Check executionModeUi and market category (via isCryptoMarket, but we need to ensure computed prop is updated or check directly)
+        const exchangeId = strategy.exchange_config.exchange_id || ''
         const isLive = this.executionModeUi === 'live'
-        const isCrypto = this.selectedMarketCategory === 'Crypto'
+        const supportsLiveTrading = ['Crypto', 'USStock', 'HShare'].includes(this.selectedMarketCategory)
+        const isBrokerMarket = ['USStock', 'HShare'].includes(this.selectedMarketCategory)
 
-        if (isLive && isCrypto) {
-          // Prevent exchange change handler from clearing API fields while backfilling saved data.
-          this.suppressApiClearOnce = true
-          this.form.setFieldsValue({
-            exchange_id: strategy.exchange_config.exchange_id,
-            credential_id: strategy.exchange_config.credential_id || undefined,
-            api_key: strategy.exchange_config.api_key || '',
-            secret_key: strategy.exchange_config.secret_key || '',
-            passphrase: strategy.exchange_config.passphrase || ''
-          })
+        if (isLive && supportsLiveTrading) {
+          if (isBrokerMarket) {
+            // Broker configuration (US/HK stocks)
+            this.currentBrokerId = exchangeId || 'ibkr'
+            this.form.setFieldsValue({
+              broker_id: exchangeId || 'ibkr',
+              ibkr_host: strategy.exchange_config.ibkr_host || '127.0.0.1',
+              ibkr_port: strategy.exchange_config.ibkr_port || 7497,
+              ibkr_client_id: strategy.exchange_config.ibkr_client_id || 1,
+              ibkr_account: strategy.exchange_config.ibkr_account || ''
+            })
+          } else {
+            // Crypto exchange configuration
+            this.currentExchangeId = exchangeId
+            this.suppressApiClearOnce = true
+            this.form.setFieldsValue({
+              exchange_id: exchangeId,
+              credential_id: strategy.exchange_config.credential_id || undefined,
+              api_key: strategy.exchange_config.api_key || '',
+              secret_key: strategy.exchange_config.secret_key || '',
+              passphrase: strategy.exchange_config.passphrase || ''
+            })
 
-          // If a vault credential is selected, auto-fill secrets from vault (strategy rows may not store secrets).
-          const credId = strategy.exchange_config.credential_id
-          if (credId) {
-            await this.handleCredentialSelectChange(credId)
+            // If a vault credential is selected, auto-fill secrets from vault
+            const credId = strategy.exchange_config.credential_id
+            if (credId) {
+              await this.handleCredentialSelectChange(credId)
+            }
           }
         }
 
-        // 设置当前交易所ID (UI state)
-        if (strategy.exchange_config?.exchange_id) {
-          this.currentExchangeId = strategy.exchange_config.exchange_id
+        // Update UI state
+        if (isBrokerMarket) {
+          this.currentBrokerId = exchangeId || 'ibkr'
+        } else {
+          this.currentExchangeId = exchangeId
         }
       }
 
@@ -2252,12 +2446,22 @@ export default {
         ftxus: 'blue',
         binanceus: 'gold',
         binancecoinm: 'gold',
-        binanceusdm: 'gold'
+        binanceusdm: 'gold',
+        ibkr: 'green'
       }
       return colorMap[exchangeId] || 'default'
     },
     handleApiConfigChange () {
       // 当API配置字段变化时，清空测试结果，需要重新测试
+      this.testResult = null
+      this.connectionTestResult = null
+    },
+    getModalPopupContainer () {
+      // Return document.body for Select dropdown to avoid modal scroll issues
+      return window.document.body
+    },
+    handleBrokerSelectChange (value) {
+      this.currentBrokerId = value || 'ibkr'
       this.testResult = null
       this.connectionTestResult = null
     },
@@ -2355,13 +2559,54 @@ export default {
       this.testing = true
 
       try {
-        // 构建需要验证的字段列表
+        // IBKR uses different connection test (host/port instead of api_key/secret)
+        if (this.isIBKRMarket) {
+          const values = this.form.getFieldsValue(['ibkr_host', 'ibkr_port', 'ibkr_client_id', 'ibkr_account'])
+          const host = values.ibkr_host || '127.0.0.1'
+          const port = values.ibkr_port || 7497
+          const clientId = values.ibkr_client_id || 1
+          const account = values.ibkr_account || ''
+
+          try {
+            // Call IBKR connect API
+            const res = await this.$http.post('/api/ibkr/connect', {
+              host: host,
+              port: parseInt(port),
+              clientId: parseInt(clientId),
+              account: account
+            })
+
+            if (res.data && res.data.success) {
+              this.testResult = {
+                success: true,
+                message: this.$t('trading-assistant.exchange.ibkrConnectionSuccess')
+              }
+              this.$message.success(this.$t('trading-assistant.exchange.ibkrConnectionSuccess'))
+            } else {
+              this.testResult = {
+                success: false,
+                message: res.data?.error || this.$t('trading-assistant.exchange.ibkrConnectionFailed')
+              }
+              this.$message.error(this.testResult.message)
+            }
+          } catch (error) {
+            this.testResult = {
+              success: false,
+              message: error.response?.data?.error || error.message || this.$t('trading-assistant.exchange.ibkrConnectionFailed')
+            }
+            this.$message.error(this.testResult.message)
+          } finally {
+            this.testing = false
+          }
+          return
+        }
+
+        // Crypto exchanges: validate api_key/secret_key fields
         const fieldsToValidate = ['exchange_id', 'api_key', 'secret_key']
         if (this.needsPassphrase) {
           fieldsToValidate.push('passphrase')
         }
 
-        // 先验证表单字段
         this.form.validateFields(fieldsToValidate, async (err, values) => {
           if (err) {
             this.testing = false
@@ -2375,11 +2620,9 @@ export default {
               exchange_id: values.exchange_id,
               api_key: values.api_key,
               secret_key: values.secret_key,
-              // IMPORTANT: let backend pick correct Binance endpoints (spot vs futures)
               market_type: String(marketType || 'swap')
             }
 
-            // 如果需要 passphrase，添加它
             if (this.needsPassphrase && values.passphrase) {
               exchangeConfig.passphrase = values.passphrase
             }
@@ -2489,7 +2732,7 @@ export default {
         if (!err) {
           try {
             this.saving = true
-            const isLive = this.isCryptoMarket && values.execution_mode === 'live'
+            const isLive = this.canUseLiveTrading && values.execution_mode === 'live'
 
             if (isLive) {
               const testResult = this.testResult
@@ -2557,13 +2800,22 @@ export default {
                 indicator_name: indicator.name,
                 indicator_code: indicator.code || ''
               },
-              exchange_config: isLive ? {
+              exchange_config: isLive ? (this.isIBKRMarket ? {
+                // Broker configuration (US/HK stocks)
+                exchange_id: values.broker_id || this.currentBrokerId || 'ibkr',
+                // IBKR specific fields
+                ibkr_host: values.ibkr_host || '127.0.0.1',
+                ibkr_port: values.ibkr_port || 7497,
+                ibkr_client_id: values.ibkr_client_id || 1,
+                ibkr_account: values.ibkr_account || ''
+              } : {
+                // Crypto exchange configuration
                 exchange_id: values.exchange_id,
                 credential_id: values.credential_id,
                 api_key: values.api_key,
                 secret_key: values.secret_key,
                 passphrase: this.needsPassphrase ? values.passphrase : undefined
-              } : undefined,
+              }) : undefined,
               trading_config: {
                 initial_capital: values.initial_capital,
                 leverage: leverage,
@@ -2630,8 +2882,8 @@ export default {
                 const totalCreated = res.data?.total_created || this.selectedSymbols.length
                 this.$message.success(this.$t('trading-assistant.messages.batchCreateSuccess', { count: totalCreated }))
               }
-              if (isLive && values.save_credential) {
-                // Save credential to vault (best-effort)
+              // Save credential to vault (crypto exchanges only, IBKR doesn't need this)
+              if (isLive && values.save_credential && !this.isIBKRMarket) {
                 try {
                   await createExchangeCredential({
                     user_id: 1,

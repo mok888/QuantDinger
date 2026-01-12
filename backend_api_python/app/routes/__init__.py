@@ -19,6 +19,7 @@ def register_routes(app: Flask):
     from app.routes.dashboard import dashboard_bp
     from app.routes.settings import settings_bp
     from app.routes.portfolio import portfolio_bp
+    from app.routes.ibkr import ibkr_bp
     
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/user')  # 兼容前端 /api/user/login
@@ -33,4 +34,5 @@ def register_routes(app: Flask):
     app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(portfolio_bp, url_prefix='/api/portfolio')
+    app.register_blueprint(ibkr_bp, url_prefix='/api/ibkr')
 

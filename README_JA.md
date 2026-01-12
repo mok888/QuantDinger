@@ -96,6 +96,7 @@ QuantDingerには、ウェブから金融情報を収集し、ローカル市場
 
 ### 開発ガイド
 - [Python 戦略開発ガイド](docs/STRATEGY_DEV_GUIDE_JA.md)
+- [Interactive Brokers (IBKR) トレーディングガイド](docs/IBKR_TRADING_GUIDE_EN.md) 🆕
 
 ### 通知設定
 - [Telegram 通知設定](docs/NOTIFICATION_TELEGRAM_CONFIG_EN.md)
@@ -330,8 +331,9 @@ QuantDingerは、包括的な国際化対応により、世界中のユーザー
 | 市場タイプ | データソース | 取引 |
 |-------------|--------------|---------|
 | **暗号資産** | Binance, OKX, Bitget, + 100 取引所 | ✅ 完全サポート |
-| **米国株** | Yahoo Finance, Finnhub, Tiingo | ✅ ブローカーAPI経由 |
-| **中国/香港株** | AkShare, East Money | ⚡ データのみ |
+| **米国株** | Yahoo Finance, Finnhub, Tiingo | ✅ IBKR経由 🆕 |
+| **香港株** | AkShare, East Money | ✅ IBKR経由 🆕 |
+| **中国株(A株)** | AkShare, East Money | ⚡ データのみ |
 | **FX** | Finnhub, OANDA | ✅ ブローカーAPI経由 |
 | **先物** | 取引所API, AkShare | ⚡ データのみ |
 

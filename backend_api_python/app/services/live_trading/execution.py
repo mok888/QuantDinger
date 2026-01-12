@@ -1,5 +1,9 @@
 """
 Translate a strategy signal into a direct-exchange order call.
+
+Supports:
+- Crypto exchanges: Binance, OKX, Bitget, Bybit, Coinbase, Kraken, KuCoin, Gate, Bitfinex
+- Traditional brokers: Interactive Brokers (IBKR) for US/HK stocks
 """
 
 from __future__ import annotations
@@ -20,6 +24,9 @@ from app.services.live_trading.kucoin import KucoinSpotClient
 from app.services.live_trading.kucoin import KucoinFuturesClient
 from app.services.live_trading.gate import GateSpotClient, GateUsdtFuturesClient
 from app.services.live_trading.bitfinex import BitfinexClient, BitfinexDerivativesClient
+
+# Lazy import IBKR
+IBKRClient = None
 
 
 def _signal_to_sides(signal_type: str) -> Tuple[str, str, bool]:
@@ -144,6 +151,80 @@ def place_order_from_signal(
     if isinstance(client, KrakenFuturesClient):
         return client.place_market_order(symbol=symbol, side=side, size=qty, reduce_only=reduce_only, client_order_id=client_order_id)
 
+    # Check for IBKR client (lazy import to avoid circular dependency)
+    global IBKRClient
+    if IBKRClient is None:
+        try:
+            from app.services.ibkr_trading import IBKRClient as _IBKRClient
+            IBKRClient = _IBKRClient
+        except ImportError:
+            pass
+
+    if IBKRClient is not None and isinstance(client, IBKRClient):
+        return _place_ibkr_order(
+            client=client,
+            signal_type=signal_type,
+            symbol=symbol,
+            amount=qty,
+            exchange_config=exchange_config,
+        )
+
     raise LiveTradingError(f"Unsupported client type: {type(client)}")
+
+
+def _place_ibkr_order(
+    client,
+    *,
+    signal_type: str,
+    symbol: str,
+    amount: float,
+    exchange_config: Optional[Dict[str, Any]] = None,
+) -> LiveOrderResult:
+    """
+    Place order via IBKR for US/HK stocks.
+
+    Signal mapping for stocks (no short selling in this implementation):
+    - open_long / add_long -> BUY
+    - close_long / reduce_long -> SELL
+    - open_short / close_short -> Not supported (raises error)
+    """
+    sig = (signal_type or "").strip().lower()
+
+    # Stock trading: no short selling support in basic implementation
+    if "short" in sig:
+        raise LiveTradingError("IBKR stock trading does not support short signals in this implementation")
+
+    # Determine action
+    if sig in ("open_long", "add_long"):
+        action = "buy"
+    elif sig in ("close_long", "reduce_long"):
+        action = "sell"
+    else:
+        raise LiveTradingError(f"Unsupported signal_type for IBKR: {signal_type}")
+
+    # Get market type from config
+    cfg = exchange_config if isinstance(exchange_config, dict) else {}
+    market_type = str(cfg.get("market_type") or cfg.get("market_category") or "USStock").strip()
+
+    # Place market order
+    result = client.place_market_order(
+        symbol=symbol,
+        action=action,
+        quantity=amount,
+        market_type=market_type,
+    )
+
+    # Convert IBKRClient result to LiveOrderResult format
+    return LiveOrderResult(
+        success=result.success,
+        exchange_order_id=str(result.order_id) if result.order_id else "",
+        filled=result.filled,
+        avg_price=result.avg_price,
+        raw={
+            "status": result.status,
+            "message": result.message,
+            "raw": result.raw,
+        },
+    )
 
 

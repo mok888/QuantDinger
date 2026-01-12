@@ -96,6 +96,7 @@ QuantDinger includes a built-in **LLM-based multi-agent research system** that g
 
 ### Guides
 - [Python Strategy Development Guide](docs/STRATEGY_DEV_GUIDE.md)
+- [Interactive Brokers (IBKR) Trading Guide](docs/IBKR_TRADING_GUIDE_EN.md) 🆕
 
 ### Notification Configuration
 - [Telegram Notification Setup](docs/NOTIFICATION_TELEGRAM_CONFIG_EN.md)
@@ -335,8 +336,9 @@ All UI elements, error messages, and documentation are fully translated. Languag
 | Market Type | Data Sources | Trading |
 |-------------|--------------|---------|
 | **Cryptocurrency** | Binance, OKX, Bitget, + 100 exchanges | ✅ Full support |
-| **US Stocks** | Yahoo Finance, Finnhub, Tiingo | ✅ Via broker API |
-| **CN/HK Stocks** | AkShare, East Money | ⚡ Data only |
+| **US Stocks** | Yahoo Finance, Finnhub, Tiingo | ✅ Via IBKR 🆕 |
+| **HK Stocks** | AkShare, East Money | ✅ Via IBKR 🆕 |
+| **CN Stocks (A-shares)** | AkShare, East Money | ⚡ Data only |
 | **Forex** | Finnhub, OANDA | ✅ Via broker API |
 | **Futures** | Exchange APIs, AkShare | ⚡ Data only |
 

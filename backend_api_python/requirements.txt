@@ -11,3 +11,5 @@ pymysql>=1.0.2
 SQLAlchemy>=2.0.0
 PyJWT==2.8.0
 python-dotenv>=1.0.1
+# Interactive Brokers trading (optional, for US/HK stock trading via TWS/IB Gateway)
+ib_insync>=0.9.86

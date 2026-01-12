@@ -96,6 +96,7 @@ QuantDinger 包含一个内置的**基于 LLM 的多智能体研究系统**，�
 
 ### 开发指南
 - [Python 策略开发指南](docs/STRATEGY_DEV_GUIDE_CN.md)
+- [盈透证券 (IBKR) 实盘交易指南](docs/IBKR_TRADING_GUIDE_CN.md) 🆕
 
 ### 通知配置
 - [Telegram 通知配置](docs/NOTIFICATION_TELEGRAM_CONFIG_CH.md)
@@ -374,8 +375,9 @@ QuantDinger 为全球用户构建，提供全面的国际化支持：
 | 市场类型 | 数据源 | 交易 |
 |-------------|--------------|---------|
 | **加密货币** | Binance, OKX, Bitget, + 100 交易所 | ✅ 全面支持 |
-| **美股** | Yahoo Finance, Finnhub, Tiingo | ✅ 通过券商 API |
-| **A股/港股** | AkShare, 东方财富 | ⚡ 仅数据 |
+| **美股** | Yahoo Finance, Finnhub, Tiingo | ✅ 通过盈透证券 🆕 |
+| **港股** | AkShare, 东方财富 | ✅ 通过盈透证券 🆕 |
+| **A股** | AkShare, 东方财富 | ⚡ 仅数据 |
 | **外汇** | Finnhub, OANDA | ✅ 通过券商 API |
 | **期货** | 交易所 API, AkShare | ⚡ 仅数据 |
 

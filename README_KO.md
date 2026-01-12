@@ -96,6 +96,7 @@ QuantDinger는 웹에서 금융 정보를 수집하고, 로컬 시장 데이터�
 
 ### 개발 가이드
 - [Python 전략 개발 가이드](docs/STRATEGY_DEV_GUIDE_KO.md)
+- [Interactive Brokers (IBKR) 트레이딩 가이드](docs/IBKR_TRADING_GUIDE_EN.md) 🆕
 
 ### 알림 설정
 - [Telegram 알림 설정](docs/NOTIFICATION_TELEGRAM_CONFIG_EN.md)
@@ -343,8 +344,9 @@ QuantDinger는 포괄적인 국제화를 통해 글로벌 사용자를 위해 �
 | 시장 유형 | 데이터 소스 | 거래 |
 |-------------|--------------|---------|
 | **암호화폐** | Binance, OKX, Bitget, + 100 거래소 | ✅ 완전 지원 |
-| **미국 주식** | Yahoo Finance, Finnhub, Tiingo | ✅ 브로커 API 경유 |
-| **중국/홍콩 주식** | AkShare, East Money | ⚡ 데이터만 |
+| **미국 주식** | Yahoo Finance, Finnhub, Tiingo | ✅ IBKR 경유 🆕 |
+| **홍콩 주식** | AkShare, East Money | ✅ IBKR 경유 🆕 |
+| **중국 주식(A주)** | AkShare, East Money | ⚡ 데이터만 |
 | **외환** | Finnhub, OANDA | ✅ 브로커 API 경유 |
 | **선물** | 거래소 API, AkShare | ⚡ 데이터만 |
 
