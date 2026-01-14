@@ -159,8 +159,8 @@ export default {
         const market = this.market || ''
         const res = await request({
           url: '/api/indicator/backtest/history',
-          method: 'post',
-          data: {
+          method: 'get',
+          params: {
             userid: this.userId,
             limit: 100,
             offset: 0,
@@ -185,8 +185,8 @@ export default {
       try {
         const res = await request({
           url: '/api/indicator/backtest/get',
-          method: 'post',
-          data: { userid: this.userId, runId: record.id }
+          method: 'get',
+          params: { userid: this.userId, runId: record.id }
         })
         if (res && res.code === 1 && res.data) {
           this.$emit('view', res.data)

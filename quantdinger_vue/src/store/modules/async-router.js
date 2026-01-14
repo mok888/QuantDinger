@@ -13,10 +13,15 @@ const permission = {
     SET_ROUTERS: (state, routers) => {
       state.addRouters = routers
       state.routers = constantRouterMap.concat(routers)
+    },
+    // Reset routers to force regeneration (used on login/logout)
+    RESET_ROUTERS: (state) => {
+      state.addRouters = []
+      state.routers = constantRouterMap
     }
   },
   actions: {
-    GenerateRoutes ({ commit }, data) {
+    GenerateRoutes ({ commit, rootState }, data) {
       return new Promise((resolve, reject) => {
         const { token } = data
         generatorDynamicRouter(token).then(routers => {
@@ -26,6 +31,10 @@ const permission = {
           reject(e)
         })
       })
+    },
+    // Reset routes action
+    ResetRoutes ({ commit }) {
+      commit('RESET_ROUTERS')
     }
   }
 }

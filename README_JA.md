@@ -53,7 +53,7 @@
 
 ### QuantDingerとは？
 
-QuantDingerは **ローカルファースト、プライバシー重視の定量的取引インフラストラクチャ** です。完全にあなたのマシン上で実行され、戦略、取引データ、APIキーを完全にコントロールできます。
+QuantDingerは **ローカルファースト、プライバシー重視のセルフホスト型定量取引インフラ** です。あなたのマシン/サーバー上で実行され、**PostgreSQL によるマルチユーザーアカウント** を提供しつつ、戦略・取引データ・APIキーを完全にコントロールできます。
 
 ### なぜローカルファーストなのか？
 
@@ -73,77 +73,11 @@ QuantDingerには、ウェブから金融情報を収集し、ローカル市場
 
 ### コアバリュー
 
-- **🔓 Apache 2.0 オープンソース**: 完全に寛容で商用利用に適しています。ウイルス性のGPL/AGPLライセンスとは異なり、コードと変更を真に所有できます。
+- **🔓 Apache 2.0 オープンソース（コード）**: 寛容で商用利用に適しています。Apache 2.0 の範囲で fork/改変が可能ですが、ライセンス/著作権表示など必要な告知は保持してください。
 - **🐍 Pythonネイティブ & ビジュアル**: 標準のPythonでインジケーターを作成（PineScriptより簡単）、AIが支援します。チャート上でシグナルを直接可視化 ——「ローカル版TradingView」体験を構築。
 - **🤖 AIループ最適化**: 戦略を実行するだけでなく、AIがバックテスト結果を分析してパラメータ調整（ストップロス/利益確定/MACD設定）を提案し、閉ループ最適化を形成します。
 - **🌍 グローバルマーケットアクセス**: 暗号資産（実取引）、米国/中国株、FX、先物（データ/通知）をサポートする統一システム。
 - **⚡ Docker & クリーンアーキテクチャ**: 4行のコマンドで高速デプロイ。モダンな技術スタック（Vue + Python）、クリーンなアーキテクチャ、関心の分離。
-
----
-
-## 🏆 パートナーとスポンサー
-
-<div align="center">
-
-### 💼 信頼できる取引所パートナー
-
-私たちは、定量取引に信頼性の高いインフラストラクチャを提供する主要な暗号通貨取引所と提携できることを誇りに思います。これらのパートナーシップは、QuantDingerの継続的な開発を支援するのに役立ちます。
-
-<table>
-  <tr>
-    <td align="center" width="33.33%">
-      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
-        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
-      </a>
-      <br/><br/>
-      <strong>世界最大の暗号通貨取引所</strong><br/>
-      <small>現物 • 先物 • マージン取引</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
-        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
-      </a>
-      <br/><br/>
-      <strong>主要なデリバティブプラットフォーム</strong><br/>
-      <small>現物 • パーペチュアル • オプション</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
-        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
-      </a>
-      <br/><br/>
-      <strong>革新的なコピートレード</strong><br/>
-      <small>現物 • 先物 • ソーシャルトレード</small>
-    </td>
-  </tr>
-</table>
-
-<p align="center">
-  <em>パートナーリンクを使用することで、同じ取引体験を楽しみながらQuantDingerの開発を支援できます。</em>
-</p>
-
----
-
-### 💝 直接サポート
-
-あなたの貢献は、QuantDingerの維持と改善に役立ちます。すべての寄付が重要です！
-
-**暗号通貨寄付 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
-
-```
-0x96fa4962181bea077f8c7240efe46afbe73641a7
-```
-
-<p>
-  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
-  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
-</p>
-
-<p align="center">
-  <em>オープンソース開発へのご支援ありがとうございます！🙏</em>
-</p>
-
-</div>
 
 ---
 
@@ -575,26 +509,82 @@ npm run serve
 
 ---
 
-## 💰 プロジェクトの持続可能性
+## 💼 商用ライセンス & スポンサー（Commercial License & Sponsorship）
 
-QuantDingerはオープンソースで無料で使用できます。有用だと思われる場合は、以下が継続的な開発を支援する方法です：
+QuantDinger のコードは **Apache License 2.0** で提供されています。ただし **Apache 2.0 は商標権を付与しません**。QuantDinger の名称/ロゴ/ブランドは商標およびブランドポリシーの対象です（コードライセンスとは別扱い）：
+
+- **著作権/帰属表示**：LICENSE/NOTICE など、必要な著作権・ライセンス告知は保持してください。
+- **商標（名称/ロゴ/ブランド）**：QuantDinger の名称/ロゴ/ブランドを用いて、出所の誤認や背書きを示唆してはいけません。改変版を再配布する場合、書面許可がない限り QuantDinger ブランド表示の削除/置換が必要になることがあります。
+
+再配布物で QuantDinger のブランド表示を**保持/変更**したい場合（UI 上のロゴ使用などを含む）、**商用ライセンス**についてお問い合わせください。
+
+参照：`TRADEMARKS.md`
+
+### 商用ライセンスで得られるもの
+
+- 合意に基づく **ブランド/表示の商用許諾**
+- **運用サポート**：デプロイ、アップグレード、障害対応、保守ガイダンス
+- **コンサルティング**：アーキテクチャレビュー、性能チューニング、戦略ワークフロー相談
+- **スポンサー枠**：スポンサーとしてロゴ/広告掲載（README/サイト/アプリ内など合意に基づく）
+
+### 連絡先
+
+- **Telegram**: [QuantDinger Group](https://t.me/worldinbroker)
+- **Email**: [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
 
 ---
 
-### 商用サービス
+### 💼 取引所パートナー（アフィリエイトリンク）
 
-以下のプロフェッショナルサービスを提供しています：
+パートナーリンクを使用することで、同じ取引体験を楽しみながら QuantDinger の開発を支援できます。
 
-| サービス | 説明 |
-|---------|-------------|
-| **デプロイ & セットアップ** | サーバーのデプロイ、設定、最適化に関するマンツーマンのサポート |
-| **カスタム戦略開発** | 特定のニーズや市場に合わせて設計された取引戦略の開発 |
-| **エンタープライズアップグレード** | 商用ライセンス、優先サポート、ビジネス向けの高度な機能 |
-| **トレーニング & コンサルティング** | 取引チーム向けの実践的なトレーニングセッションと戦略コンサルティング |
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="33.33%">
+      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
+        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
+      </a>
+      <br/><br/>
+      <strong>世界最大の暗号通貨取引所</strong><br/>
+      <small>現物 • 先物 • マージン取引</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
+        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
+      </a>
+      <br/><br/>
+      <strong>主要なデリバティブプラットフォーム</strong><br/>
+      <small>現物 • パーペチュアル • オプション</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
+        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
+      </a>
+      <br/><br/>
+      <strong>革新的なコピートレード</strong><br/>
+      <small>現物 • 先物 • ソーシャルトレード</small>
+    </td>
+  </tr>
+</table>
+</div>
 
-**ご興味がありますか？** 以下よりお問い合わせください：
-- 📧 Email: [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
-- 💬 Telegram: [QuantDinger Group](https://t.me/quantdinger)
+---
+
+### 💝 直接サポート（寄付）
+
+あなたのご支援は QuantDinger の維持・改善に役立ちます。
+
+**暗号通貨寄付 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
+
+```
+0x96fa4962181bea077f8c7240efe46afbe73641a7
+```
+
+<p>
+  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
+  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
+</p>
 
 ---
 

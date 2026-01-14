@@ -876,6 +876,16 @@ const locale = {
 
 'dashboard.analysis.message.removeStockFailed': 'Xóa thất bại',
 
+'dashboard.analysis.message.resumingAnalysis': 'Đang tiếp tục tác vụ phân tích...',
+
+'dashboard.analysis.message.deleteSuccess': 'Đã xóa thành công',
+
+'dashboard.analysis.message.deleteFailed': 'Xóa thất bại',
+
+'dashboard.analysis.modal.history.delete': 'Xóa',
+
+'dashboard.analysis.modal.history.deleteConfirm': 'Bạn có chắc chắn muốn xóa bản ghi phân tích này không?',
+
 'dashboard.analysis.test': 'Cửa hàng đường Gongzhuan {không}',
 
 'dashboard.analysis.introduce': 'Mô tả chỉ báo',

@@ -11,6 +11,10 @@ pymysql>=1.0.2
 SQLAlchemy>=2.0.0
 PyJWT==2.8.0
 python-dotenv>=1.0.1
+# PostgreSQL support (multi-user mode)
+psycopg2-binary>=2.9.9
+# Password hashing
+bcrypt>=4.1.0
 # Interactive Brokers trading (optional, for US/HK stock trading via TWS/IB Gateway)
 ib_insync>=0.9.86
 # MetaTrader 5 trading (optional, for forex trading via MT5 terminal, Windows only)

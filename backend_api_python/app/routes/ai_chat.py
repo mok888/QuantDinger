@@ -32,7 +32,7 @@ def chat_message():
     })
 
 
-@ai_chat_bp.route('/chat/history', methods=['POST'])
+@ai_chat_bp.route('/chat/history', methods=['GET'])
 def get_chat_history():
     """Return empty history (compatibility stub)."""
     return jsonify({'code': 1, 'msg': 'success', 'data': []})

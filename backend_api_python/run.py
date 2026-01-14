@@ -83,6 +83,15 @@ def main():
     """启动应用"""
     # Keep startup messages ASCII-only and short.
     print("QuantDinger Python API v2.0.0")
+    
+    # Check demo mode status for debugging
+    demo_status = os.getenv('IS_DEMO_MODE', 'false').lower()
+    print(f"Status Check: IS_DEMO_MODE={demo_status}")
+    if demo_status == 'true':
+        print("!!! RUNNING IN DEMO MODE (READ-ONLY) !!!")
+    else:
+        print("Running in FULL ACCESS mode")
+        
     print(f"Service starting at: http://{Config.HOST}:{Config.PORT}")
     
     # Flask dev server is for local development only.

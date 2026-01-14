@@ -1,7 +1,7 @@
 """
-Agent memory system (local-only).
+Agent memory system (PostgreSQL).
 
-This module stores agent experiences in SQLite and retrieves relevant past cases
+This module stores agent experiences in PostgreSQL and retrieves relevant past cases
 to inject into prompts (RAG-style). It does NOT finetune model weights.
 
 Retrieval (configurable):
@@ -14,7 +14,6 @@ Ranking combines:
 - optional returns weight
 """
 
-import sqlite3
 import json
 import os
 import math
@@ -23,31 +22,24 @@ from datetime import datetime, timezone
 import difflib
 
 from app.utils.logger import get_logger
+from app.utils.db import get_db_connection
 from .embedding import EmbeddingService, cosine_sim
 
 logger = get_logger(__name__)
 
 
 class AgentMemory:
-    """智能体记忆系统"""
+    """Agent memory system using PostgreSQL"""
     
     def __init__(self, agent_name: str, db_path: Optional[str] = None):
         """
-        初始化记忆系统
+        Initialize memory system.
         
         Args:
-            agent_name: 智能体名称
-            db_path: 数据库路径（可选）
+            agent_name: Agent identifier (e.g., 'trader_agent', 'risk_analyst')
+            db_path: Deprecated parameter, kept for backward compatibility
         """
         self.agent_name = agent_name
-        
-        if db_path is None:
-            # 默认数据库路径
-            db_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'memory')
-            os.makedirs(db_dir, exist_ok=True)
-            db_path = os.path.join(db_dir, f'{agent_name}_memory.db')
-        
-        self.db_path = db_path
         self.embedder = EmbeddingService()
         self.enable_vector = os.getenv("AGENT_MEMORY_ENABLE_VECTOR", "true").lower() == "true"
         self.candidate_limit = int(os.getenv("AGENT_MEMORY_CANDIDATE_LIMIT", "500") or 500)
@@ -55,58 +47,6 @@ class AgentMemory:
         self.w_sim = float(os.getenv("AGENT_MEMORY_W_SIM", "0.75") or 0.75)
         self.w_recency = float(os.getenv("AGENT_MEMORY_W_RECENCY", "0.20") or 0.20)
         self.w_returns = float(os.getenv("AGENT_MEMORY_W_RETURNS", "0.05") or 0.05)
-        self._init_database()
-    
-    def _init_database(self):
-        """初始化数据库表"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    situation TEXT NOT NULL,
-                    recommendation TEXT NOT NULL,
-                    result TEXT,
-                    returns REAL,
-                    market TEXT,
-                    symbol TEXT,
-                    timeframe TEXT,
-                    features_json TEXT,
-                    embedding BLOB,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            # Best-effort migration for older DBs
-            # NOTE: For existing tables, we must add missing columns BEFORE creating indexes
-            # that reference them (otherwise we'll hit: "no such column: market").
-            cursor.execute("PRAGMA table_info(memories)")
-            existing_cols = {row[1] for row in cursor.fetchall() or []}
-            for col, ddl in {
-                "market": "TEXT",
-                "symbol": "TEXT",
-                "timeframe": "TEXT",
-                "features_json": "TEXT",
-                "embedding": "BLOB",
-            }.items():
-                if col not in existing_cols:
-                    cursor.execute(f"ALTER TABLE memories ADD COLUMN {col} {ddl}")
-
-            # 创建索引（放在迁移之后，兼容旧库）
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_created_at ON memories(created_at)
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_market_symbol ON memories(market, symbol)
-            ''')
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"初始化记忆数据库失败: {e}")
 
     def _now_utc(self) -> datetime:
         return datetime.now(timezone.utc)
@@ -156,13 +96,13 @@ class AgentMemory:
         metadata: Optional[Dict[str, Any]] = None,
     ):
         """
-        添加记忆
+        Add a memory entry.
         
         Args:
-            situation: 情况描述
-            recommendation: 建议/决策
-            result: 结果描述（可选）
-            returns: 收益（可选）
+            situation: Situation description
+            recommendation: Decision/recommendation made
+            result: Outcome description (optional)
+            returns: Return percentage (optional)
             metadata: Optional structured metadata (market/symbol/timeframe/features...)
         """
         try:
@@ -182,45 +122,50 @@ class AgentMemory:
                 vec = self.embedder.embed(text)
                 embedding_blob = self.embedder.to_bytes(vec)
 
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO memories (situation, recommendation, result, returns, market, symbol, timeframe, features_json, embedding)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (situation, recommendation, result, returns, market, symbol, timeframe, features_json, embedding_blob))
-            
-            conn.commit()
-            conn.close()
-            logger.info(f"{self.agent_name} 添加新记忆")
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO qd_agent_memories 
+                    (agent_name, situation, recommendation, result, returns, market, symbol, timeframe, features_json, embedding)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (self.agent_name, situation, recommendation, result, returns, market, symbol, timeframe, features_json, embedding_blob)
+                )
+                conn.commit()
+                cur.close()
+            logger.info(f"{self.agent_name} added new memory")
         except Exception as e:
-            logger.error(f"添加记忆失败: {e}")
+            logger.error(f"Failed to add memory: {e}")
     
     def get_memories(self, current_situation: str, n_matches: int = 5, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        检索相似记忆
+        Retrieve similar memories.
         
         Args:
-            current_situation: 当前情况描述
-            n_matches: 返回的匹配数量
+            current_situation: Current situation description
+            n_matches: Number of matches to return
+            metadata: Optional metadata for filtering/weighting
             
         Returns:
-            匹配的记忆列表
+            List of matching memory entries
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 获取所有记忆
-            cursor.execute('''
-                SELECT id, situation, recommendation, result, returns, created_at, market, symbol, timeframe, features_json, embedding
-                FROM memories
-                ORDER BY created_at DESC
-                LIMIT ?
-            ''', (int(self.candidate_limit),))
-            
-            all_memories = cursor.fetchall()
-            conn.close()
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT id, situation, recommendation, result, returns, created_at, 
+                           market, symbol, timeframe, features_json, embedding
+                    FROM qd_agent_memories
+                    WHERE agent_name = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (self.agent_name, int(self.candidate_limit))
+                )
+                all_memories = cur.fetchall() or []
+                cur.close()
             
             if not all_memories:
                 return []
@@ -240,23 +185,24 @@ class AgentMemory:
 
             ranked = []
             for row in all_memories:
-                (
-                    mem_id,
-                    situation,
-                    recommendation,
-                    result,
-                    returns,
-                    created_at,
-                    market,
-                    symbol,
-                    timeframe,
-                    features_json,
-                    embedding_blob,
-                ) = row
+                mem_id = row['id']
+                situation = row['situation']
+                recommendation = row['recommendation']
+                result = row['result']
+                returns = row['returns']
+                created_at = row['created_at']
+                market = row['market']
+                symbol = row['symbol']
+                timeframe = row['timeframe']
+                features_json = row['features_json']
+                embedding_blob = row['embedding']
 
                 sim = 0.0
                 if self.enable_vector and embedding_blob:
                     try:
+                        # Handle memoryview/bytes from PostgreSQL
+                        if isinstance(embedding_blob, memoryview):
+                            embedding_blob = bytes(embedding_blob)
                         mem_vec = self.embedder.from_bytes(embedding_blob)
                         sim = cosine_sim(query_vec, mem_vec)
                     except Exception:
@@ -292,50 +238,60 @@ class AgentMemory:
             return ranked[: max(0, int(n_matches or 0))]
             
         except Exception as e:
-            logger.error(f"检索记忆失败: {e}")
+            logger.error(f"Failed to retrieve memories: {e}")
             return []
     
     def update_memory_result(self, memory_id: int, result: str, returns: Optional[float] = None):
         """
-        更新记忆的结果
+        Update memory result.
         
         Args:
-            memory_id: 记忆ID
-            result: 结果描述
-            returns: 收益
+            memory_id: Memory ID
+            result: Outcome description
+            returns: Return percentage
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                UPDATE memories
-                SET result = ?, returns = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (result, returns, memory_id))
-            
-            conn.commit()
-            conn.close()
-            logger.info(f"{self.agent_name} 更新记忆 {memory_id}")
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    UPDATE qd_agent_memories
+                    SET result = ?, returns = ?, updated_at = NOW()
+                    WHERE id = ? AND agent_name = ?
+                    """,
+                    (result, returns, memory_id, self.agent_name)
+                )
+                conn.commit()
+                cur.close()
+            logger.info(f"{self.agent_name} updated memory {memory_id}")
         except Exception as e:
-            logger.error(f"更新记忆失败: {e}")
+            logger.error(f"Failed to update memory: {e}")
     
     def get_statistics(self) -> Dict[str, Any]:
-        """获取记忆统计信息"""
+        """Get memory statistics for this agent."""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT COUNT(*) FROM memories')
-            total = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT AVG(returns) FROM memories WHERE returns IS NOT NULL')
-            avg_returns = cursor.fetchone()[0] or 0
-            
-            cursor.execute('SELECT COUNT(*) FROM memories WHERE returns > 0')
-            positive = cursor.fetchone()[0]
-            
-            conn.close()
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                
+                cur.execute(
+                    'SELECT COUNT(*) as cnt FROM qd_agent_memories WHERE agent_name = ?',
+                    (self.agent_name,)
+                )
+                total = cur.fetchone()['cnt']
+                
+                cur.execute(
+                    'SELECT AVG(returns) as avg_ret FROM qd_agent_memories WHERE agent_name = ? AND returns IS NOT NULL',
+                    (self.agent_name,)
+                )
+                avg_returns = cur.fetchone()['avg_ret'] or 0
+                
+                cur.execute(
+                    'SELECT COUNT(*) as cnt FROM qd_agent_memories WHERE agent_name = ? AND returns > 0',
+                    (self.agent_name,)
+                )
+                positive = cur.fetchone()['cnt']
+                
+                cur.close()
             
             return {
                 'total_memories': total,
@@ -344,5 +300,20 @@ class AgentMemory:
                 'success_rate': round(positive / total * 100, 2) if total > 0 else 0
             }
         except Exception as e:
-            logger.error(f"获取统计信息失败: {e}")
+            logger.error(f"Failed to get statistics: {e}")
             return {}
+
+    def clear_memories(self):
+        """Clear all memories for this agent (use with caution)."""
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    'DELETE FROM qd_agent_memories WHERE agent_name = ?',
+                    (self.agent_name,)
+                )
+                conn.commit()
+                cur.close()
+            logger.warning(f"{self.agent_name} cleared all memories")
+        except Exception as e:
+            logger.error(f"Failed to clear memories: {e}")

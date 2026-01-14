@@ -2,7 +2,7 @@
 Portfolio API routes (local-only).
 Manages manual positions (user's existing holdings) and AI monitoring tasks.
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import json
 import traceback
 import time
@@ -13,6 +13,7 @@ from app.services.kline import KlineService
 from app.utils.logger import get_logger
 from app.utils.cache import CacheManager
 from app.utils.db import get_db_connection
+from app.utils.auth import login_required
 from app.services.symbol_name import resolve_symbol_name
 from app.data.market_symbols_seed import get_symbol_name as seed_get_symbol_name
 
@@ -23,17 +24,15 @@ kline_service = KlineService()
 cache = CacheManager()
 
 # Thread pool for parallel price fetching
-# 降低并发数避免触发API限制（尤其是外汇/美股等有速率限制的API）
+# Lower concurrency to avoid triggering API limits (especially for forex/US stocks)
 executor = ThreadPoolExecutor(max_workers=3)
 
-# 请求间隔（秒），避免请求过快
+# Request interval (seconds) to avoid too frequent requests
 REQUEST_INTERVAL = 0.3
 
-# 速率限制相关
+# Rate limiting related
 _request_lock = threading.Lock()
 _last_request_time = {}  # {market: timestamp}
-
-DEFAULT_USER_ID = 1
 
 
 def _now_ts() -> int:
@@ -109,10 +108,12 @@ def _get_single_price(market: str, symbol: str, force_refresh: bool = False) -> 
 # ==================== Position CRUD ====================
 
 @portfolio_bp.route('/positions', methods=['GET'])
+@login_required
 def get_positions():
-    """Get all manual positions with current prices."""
+    """Get all manual positions with current prices for the current user."""
     try:
-        # 检查是否强制刷新（跳过缓存）
+        user_id = g.user_id
+        # Check if force refresh (skip cache)
         force_refresh = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
         
         with get_db_connection() as db:
@@ -124,7 +125,7 @@ def get_positions():
                 WHERE user_id = ?
                 ORDER BY id DESC
                 """,
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
             cur.close()
@@ -212,9 +213,11 @@ def get_positions():
 
 
 @portfolio_bp.route('/positions', methods=['POST'])
+@login_required
 def add_position():
-    """Add a new manual position."""
+    """Add a new manual position for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         market = (data.get('market') or '').strip()
         symbol = _normalize_symbol(data.get('symbol'))
@@ -244,7 +247,6 @@ def add_position():
         name = name_in or resolved or symbol
         
         tags_json = json.dumps(tags if isinstance(tags, list) else [], ensure_ascii=False)
-        now = _now_ts()
         
         with get_db_connection() as db:
             cur = db.cursor()
@@ -252,7 +254,7 @@ def add_position():
                 """
                 INSERT INTO qd_manual_positions 
                 (user_id, market, symbol, name, side, quantity, entry_price, entry_time, notes, tags, group_name, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ON CONFLICT(user_id, market, symbol, side) DO UPDATE SET
                     name = excluded.name,
                     quantity = excluded.quantity,
@@ -261,9 +263,9 @@ def add_position():
                     notes = excluded.notes,
                     tags = excluded.tags,
                     group_name = excluded.group_name,
-                    updated_at = excluded.updated_at
+                    updated_at = NOW()
                 """,
-                (DEFAULT_USER_ID, market, symbol, name, side, quantity, entry_price, entry_time, notes, tags_json, group_name, now, now)
+                (user_id, market, symbol, name, side, quantity, entry_price, entry_time, notes, tags_json, group_name)
             )
             position_id = cur.lastrowid
             db.commit()
@@ -277,9 +279,11 @@ def add_position():
 
 
 @portfolio_bp.route('/positions/<int:position_id>', methods=['PUT'])
+@login_required
 def update_position(position_id):
-    """Update an existing position."""
+    """Update an existing position for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         
         updates = []
@@ -323,10 +327,9 @@ def update_position(position_id):
         if not updates:
             return jsonify({'code': 0, 'msg': 'No fields to update', 'data': None}), 400
         
-        updates.append('updated_at = ?')
-        params.append(_now_ts())
+        updates.append('updated_at = NOW()')
         params.append(position_id)
-        params.append(DEFAULT_USER_ID)
+        params.append(user_id)
         
         with get_db_connection() as db:
             cur = db.cursor()
@@ -345,14 +348,16 @@ def update_position(position_id):
 
 
 @portfolio_bp.route('/positions/<int:position_id>', methods=['DELETE'])
+@login_required
 def delete_position(position_id):
-    """Delete a position."""
+    """Delete a position for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
                 "DELETE FROM qd_manual_positions WHERE id = ? AND user_id = ?",
-                (position_id, DEFAULT_USER_ID)
+                (position_id, user_id)
             )
             db.commit()
             cur.close()
@@ -365,10 +370,12 @@ def delete_position(position_id):
 
 
 @portfolio_bp.route('/summary', methods=['GET'])
+@login_required
 def get_portfolio_summary():
-    """Get portfolio summary with total value, PnL, and market distribution."""
+    """Get portfolio summary with total value, PnL, and market distribution for the current user."""
     try:
-        # 检查是否强制刷新
+        user_id = g.user_id
+        # Check if force refresh
         force_refresh = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
         
         with get_db_connection() as db:
@@ -379,7 +386,7 @@ def get_portfolio_summary():
                 FROM qd_manual_positions
                 WHERE user_id = ?
                 """,
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
             cur.close()
@@ -485,9 +492,11 @@ def get_portfolio_summary():
 # ==================== Monitor CRUD ====================
 
 @portfolio_bp.route('/monitors', methods=['GET'])
+@login_required
 def get_monitors():
-    """Get all position monitors."""
+    """Get all position monitors for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -498,7 +507,7 @@ def get_monitors():
                 WHERE user_id = ?
                 ORDER BY id DESC
                 """,
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
             cur.close()
@@ -529,9 +538,11 @@ def get_monitors():
 
 
 @portfolio_bp.route('/monitors', methods=['POST'])
+@login_required
 def add_monitor():
-    """Add a new position monitor."""
+    """Add a new position monitor for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         name = (data.get('name') or '').strip()
         position_ids = data.get('position_ids') or []
@@ -547,9 +558,7 @@ def add_monitor():
             monitor_type = 'ai'
         
         # Calculate next_run_at based on interval
-        now = _now_ts()
         interval_minutes = int(config.get('interval_minutes') or 60)
-        next_run_at = now + (interval_minutes * 60)
         
         position_ids_json = json.dumps(position_ids if isinstance(position_ids, list) else [], ensure_ascii=False)
         config_json = json.dumps(config if isinstance(config, dict) else {}, ensure_ascii=False)
@@ -561,10 +570,10 @@ def add_monitor():
                 """
                 INSERT INTO qd_position_monitors 
                 (user_id, name, position_ids, monitor_type, config, notification_config, is_active, next_run_at, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NOW() + INTERVAL '%s minutes', NOW(), NOW())
                 """,
-                (DEFAULT_USER_ID, name, position_ids_json, monitor_type, config_json, notification_config_json, 
-                 1 if is_active else 0, next_run_at, now, now)
+                (user_id, name, position_ids_json, monitor_type, config_json, notification_config_json, 
+                 1 if is_active else 0, interval_minutes)
             )
             monitor_id = cur.lastrowid
             db.commit()
@@ -578,9 +587,11 @@ def add_monitor():
 
 
 @portfolio_bp.route('/monitors/<int:monitor_id>', methods=['PUT'])
+@login_required
 def update_monitor(monitor_id):
-    """Update an existing monitor."""
+    """Update an existing monitor for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         
         updates = []
@@ -599,15 +610,14 @@ def update_monitor(monitor_id):
             updates.append('monitor_type = ?')
             params.append((data.get('monitor_type') or 'ai').strip())
         
+        next_run_interval = None  # Will store interval for special handling
         if 'config' in data:
             config = data.get('config') or {}
             updates.append('config = ?')
             params.append(json.dumps(config if isinstance(config, dict) else {}, ensure_ascii=False))
             
-            # Recalculate next_run_at if interval changed
-            interval_minutes = int(config.get('interval_minutes') or 60)
-            updates.append('next_run_at = ?')
-            params.append(_now_ts() + (interval_minutes * 60))
+            # Recalculate next_run_at if interval changed (handled separately for PostgreSQL)
+            next_run_interval = int(config.get('interval_minutes') or 60)
         
         if 'notification_config' in data:
             notification_config = data.get('notification_config') or {}
@@ -621,10 +631,13 @@ def update_monitor(monitor_id):
         if not updates:
             return jsonify({'code': 0, 'msg': 'No fields to update', 'data': None}), 400
         
-        updates.append('updated_at = ?')
-        params.append(_now_ts())
+        # Add next_run_at update if interval was changed
+        if next_run_interval is not None:
+            updates.append(f"next_run_at = NOW() + INTERVAL '{next_run_interval} minutes'")
+        
+        updates.append('updated_at = NOW()')
         params.append(monitor_id)
-        params.append(DEFAULT_USER_ID)
+        params.append(user_id)
         
         with get_db_connection() as db:
             cur = db.cursor()
@@ -643,14 +656,16 @@ def update_monitor(monitor_id):
 
 
 @portfolio_bp.route('/monitors/<int:monitor_id>', methods=['DELETE'])
+@login_required
 def delete_monitor(monitor_id):
-    """Delete a monitor."""
+    """Delete a monitor for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
                 "DELETE FROM qd_position_monitors WHERE id = ? AND user_id = ?",
-                (monitor_id, DEFAULT_USER_ID)
+                (monitor_id, user_id)
             )
             db.commit()
             cur.close()
@@ -663,26 +678,62 @@ def delete_monitor(monitor_id):
 
 
 @portfolio_bp.route('/monitors/<int:monitor_id>/run', methods=['POST'])
+@login_required
 def run_monitor_now(monitor_id):
-    """Manually trigger a monitor to run immediately."""
+    """Manually trigger a monitor to run immediately.
+    
+    Supports two modes:
+    - async=true (default): Returns immediately, runs in background, notifies via notification system
+    - async=false: Waits for completion and returns result (may timeout for large portfolios)
+    """
     try:
         from app.services.portfolio_monitor import run_single_monitor
         
-        # Get language from request body or Accept-Language header
+        user_id = g.user_id
+        
+        # Get parameters from request body
         data = request.get_json(force=True, silent=True) or {}
         language = data.get('language')
+        async_mode = data.get('async', True)  # Default to async mode
         
-        # Fallback to Accept-Language header
+        # Fallback to Accept-Language header for language
         if not language:
             accept_lang = request.headers.get('Accept-Language', '')
             if 'zh' in accept_lang.lower():
-                language = 'en-US'
+                language = 'zh-CN'
             else:
                 language = 'en-US'
         
-        result = run_single_monitor(monitor_id, override_language=language)
-        
-        return jsonify({'code': 1, 'msg': 'success', 'data': result})
+        if async_mode:
+            # Async mode: Start background thread and return immediately
+            import threading
+            
+            def run_in_background(mid, lang, uid):
+                try:
+                    run_single_monitor(mid, override_language=lang, user_id=uid)
+                except Exception as e:
+                    logger.error(f"Background monitor run failed: {e}")
+            
+            thread = threading.Thread(
+                target=run_in_background,
+                args=(monitor_id, language, user_id),
+                daemon=True
+            )
+            thread.start()
+            
+            return jsonify({
+                'code': 1, 
+                'msg': 'success', 
+                'data': {
+                    'status': 'running',
+                    'message': 'Monitor is running in background. Results will be sent via notification.'
+                }
+            })
+        else:
+            # Sync mode: Wait for completion (may timeout)
+            result = run_single_monitor(monitor_id, override_language=language, user_id=user_id)
+            return jsonify({'code': 1, 'msg': 'success', 'data': result})
+            
     except Exception as e:
         logger.error(f"run_monitor_now failed: {str(e)}")
         logger.error(traceback.format_exc())
@@ -692,9 +743,11 @@ def run_monitor_now(monitor_id):
 # ==================== Alerts CRUD ====================
 
 @portfolio_bp.route('/alerts', methods=['GET'])
+@login_required
 def get_alerts():
-    """Get all position alerts."""
+    """Get all position alerts for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -708,7 +761,7 @@ def get_alerts():
                 WHERE a.user_id = ?
                 ORDER BY a.id DESC
                 """,
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
             cur.close()
@@ -743,9 +796,11 @@ def get_alerts():
 
 
 @portfolio_bp.route('/alerts', methods=['POST'])
+@login_required
 def add_alert():
-    """Add a new position alert."""
+    """Add a new position alert for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         position_id = data.get('position_id')  # Can be None for symbol-level alerts
         market = (data.get('market') or '').strip()
@@ -768,7 +823,7 @@ def add_alert():
                 cur = db.cursor()
                 cur.execute(
                     "SELECT market, symbol FROM qd_manual_positions WHERE id = ? AND user_id = ?",
-                    (position_id, DEFAULT_USER_ID)
+                    (position_id, user_id)
                 )
                 pos = cur.fetchone()
                 cur.close()
@@ -782,7 +837,6 @@ def add_alert():
         if threshold <= 0 and alert_type.startswith('price_'):
             return jsonify({'code': 0, 'msg': 'Threshold must be positive for price alerts', 'data': None}), 400
         
-        now = _now_ts()
         notification_config_json = json.dumps(notification_config if isinstance(notification_config, dict) else {}, ensure_ascii=False)
         
         with get_db_connection() as db:
@@ -793,7 +847,7 @@ def add_alert():
             if position_id:
                 cur.execute(
                     "SELECT id FROM qd_position_alerts WHERE position_id = ? AND user_id = ?",
-                    (position_id, DEFAULT_USER_ID)
+                    (position_id, user_id)
                 )
                 existing = cur.fetchone()
                 if existing:
@@ -805,11 +859,11 @@ def add_alert():
                     """
                     UPDATE qd_position_alerts 
                     SET alert_type = ?, threshold = ?, notification_config = ?, 
-                        is_active = ?, is_triggered = 0, repeat_interval = ?, notes = ?, updated_at = ?
+                        is_active = ?, is_triggered = 0, repeat_interval = ?, notes = ?, updated_at = NOW()
                     WHERE id = ?
                     """,
                     (alert_type, threshold, notification_config_json,
-                     1 if is_active else 0, repeat_interval, notes, now, existing_alert_id)
+                     1 if is_active else 0, repeat_interval, notes, existing_alert_id)
                 )
                 alert_id = existing_alert_id
             else:
@@ -819,10 +873,10 @@ def add_alert():
                     INSERT INTO qd_position_alerts 
                     (user_id, position_id, market, symbol, alert_type, threshold, notification_config, 
                      is_active, repeat_interval, notes, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     """,
-                    (DEFAULT_USER_ID, position_id, market, symbol, alert_type, threshold, notification_config_json,
-                     1 if is_active else 0, repeat_interval, notes, now, now)
+                    (user_id, position_id, market, symbol, alert_type, threshold, notification_config_json,
+                     1 if is_active else 0, repeat_interval, notes)
                 )
                 alert_id = cur.lastrowid
             
@@ -837,9 +891,11 @@ def add_alert():
 
 
 @portfolio_bp.route('/alerts/<int:alert_id>', methods=['PUT'])
+@login_required
 def update_alert(alert_id):
-    """Update an existing alert."""
+    """Update an existing alert for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         
         updates = []
@@ -877,10 +933,9 @@ def update_alert(alert_id):
         if not updates:
             return jsonify({'code': 0, 'msg': 'No fields to update', 'data': None}), 400
         
-        updates.append('updated_at = ?')
-        params.append(_now_ts())
+        updates.append('updated_at = NOW()')
         params.append(alert_id)
-        params.append(DEFAULT_USER_ID)
+        params.append(user_id)
         
         with get_db_connection() as db:
             cur = db.cursor()
@@ -899,14 +954,16 @@ def update_alert(alert_id):
 
 
 @portfolio_bp.route('/alerts/<int:alert_id>', methods=['DELETE'])
+@login_required
 def delete_alert(alert_id):
-    """Delete an alert."""
+    """Delete an alert for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
                 "DELETE FROM qd_position_alerts WHERE id = ? AND user_id = ?",
-                (alert_id, DEFAULT_USER_ID)
+                (alert_id, user_id)
             )
             db.commit()
             cur.close()
@@ -921,9 +978,11 @@ def delete_alert(alert_id):
 # ==================== Groups ====================
 
 @portfolio_bp.route('/groups', methods=['GET'])
+@login_required
 def get_groups():
-    """Get list of all groups with position counts."""
+    """Get list of all groups with position counts for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -934,14 +993,14 @@ def get_groups():
                 GROUP BY group_name
                 ORDER BY group_name
                 """,
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
             
             # Also get count of ungrouped
             cur.execute(
                 "SELECT COUNT(*) as count FROM qd_manual_positions WHERE user_id = ? AND (group_name IS NULL OR group_name = '')",
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             ungrouped = cur.fetchone()
             cur.close()
@@ -971,9 +1030,11 @@ def get_groups():
 
 
 @portfolio_bp.route('/groups/rename', methods=['POST'])
+@login_required
 def rename_group():
-    """Rename a group."""
+    """Rename a group for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         old_name = (data.get('old_name') or '').strip()
         new_name = (data.get('new_name') or '').strip()
@@ -981,12 +1042,11 @@ def rename_group():
         if not old_name:
             return jsonify({'code': 0, 'msg': 'old_name is required', 'data': None}), 400
         
-        now = _now_ts()
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
-                "UPDATE qd_manual_positions SET group_name = ?, updated_at = ? WHERE user_id = ? AND group_name = ?",
-                (new_name, now, DEFAULT_USER_ID, old_name)
+                "UPDATE qd_manual_positions SET group_name = ?, updated_at = NOW() WHERE user_id = ? AND group_name = ?",
+                (new_name, user_id, old_name)
             )
             db.commit()
             cur.close()

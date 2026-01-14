@@ -891,6 +891,17 @@ export default {
           if (!this.hasAnalysisResults) {
             this.reset()
           }
+          // If analysis stopped with results, mark all agents as completed
+          if (this.hasAnalysisResults) {
+            for (let i = 0; i < this.agents.length; i++) {
+              if (this.agentStatusMap[i] !== 'completed') {
+                this.agentStatusMap[i] = 'completed'
+              }
+            }
+            this.hasResult = true
+            this.currentStep = this.agents.length + 1
+            this.selectFirstAvailableAgent()
+          }
         }
       },
       immediate: true
@@ -975,20 +986,23 @@ export default {
       this.addLog('SYSTEM', `Initiating Quantum Analysis for ${this.symbol || 'DEMO'}...`, 'var(--neon-main)')
 
       // 初始时滚动到底部，显示第一个要执行的 agent（Fundamental Analyst，显示在最下面）
-      // 由于 reversedAgents 反转了数组，数组第一个（Fundamental Analyst）会显示在最下面
       this.$nextTick(() => {
         const listContainer = this.$refs.agentsList
         if (listContainer) {
-          // 延迟一下确保DOM已渲染
           setTimeout(() => {
             listContainer.scrollTop = listContainer.scrollHeight
           }, 100)
         }
       })
 
-      // 使用模拟进度执行（每个agent 5秒）
-      // 从最后一个 agent 开始（数组最后一个，显示时在最下面）
-      this.startSimulation()
+      // Start simulation animation while backend processes
+      this.addLog('SYSTEM', 'Starting multi-agent analysis...', '#52c41a')
+      // Small delay before starting simulation for visual effect
+      setTimeout(() => {
+        if (this.analyzing) {
+          this.startSimulation()
+        }
+      }, 500)
     },
 
     // 开始模拟执行
@@ -1447,12 +1461,12 @@ export default {
         return 'completed'
       }
 
-      // 优先使用 agentStatusMap 中的状态
+      // Use local agentStatusMap for simulation status
       if (this.agentStatusMap[agentIndex]) {
         return this.agentStatusMap[agentIndex]
       }
 
-      // 默认返回 waiting
+      // Default to waiting
       return 'waiting'
     },
 

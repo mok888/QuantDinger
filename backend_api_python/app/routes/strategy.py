@@ -1,7 +1,7 @@
 """
-交易策略 API 路由
+Trading Strategy API Routes
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import traceback
 import time
 
@@ -11,6 +11,7 @@ from app.services.backtest import BacktestService
 from app import get_trading_executor
 from app.utils.logger import get_logger
 from app.utils.db import get_db_connection
+from app.utils.auth import login_required
 from app.data_sources import DataSourceFactory
 
 logger = get_logger(__name__)
@@ -29,12 +30,13 @@ def get_strategy_service() -> StrategyService:
 
 
 @strategy_bp.route('/strategies', methods=['GET'])
+@login_required
 def list_strategies():
     """
-    策略列表（本地版：单用户）
+    List strategies for the current user.
     """
     try:
-        user_id = request.args.get('user_id', type=int) or 1
+        user_id = g.user_id
         items = get_strategy_service().list_strategies(user_id=user_id)
         return jsonify({'code': 1, 'msg': 'success', 'data': {'strategies': items}})
     except Exception as e:
@@ -44,12 +46,14 @@ def list_strategies():
 
 
 @strategy_bp.route('/strategies/detail', methods=['GET'])
+@login_required
 def get_strategy_detail():
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
-        st = get_strategy_service().get_strategy(strategy_id)
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id)
         if not st:
             return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
         return jsonify({'code': 1, 'msg': 'success', 'data': st})
@@ -60,11 +64,13 @@ def get_strategy_detail():
 
 
 @strategy_bp.route('/strategies/create', methods=['POST'])
+@login_required
 def create_strategy():
     try:
+        user_id = g.user_id
         payload = request.get_json() or {}
-        # Local mode default user
-        payload['user_id'] = int(payload.get('user_id') or 1)
+        # Use current user's ID
+        payload['user_id'] = user_id
         payload['strategy_type'] = payload.get('strategy_type') or 'IndicatorStrategy'
         new_id = get_strategy_service().create_strategy(payload)
         return jsonify({'code': 1, 'msg': 'success', 'data': {'id': new_id}})
@@ -75,18 +81,20 @@ def create_strategy():
 
 
 @strategy_bp.route('/strategies/batch-create', methods=['POST'])
+@login_required
 def batch_create_strategies():
     """
-    批量创建策略（多币种）
+    Batch create strategies (multiple symbols)
     
-    请求体:
-        strategy_name: 策略基础名称
-        symbols: 币种数组，如 ["Crypto:BTC/USDT", "Crypto:ETH/USDT"]
-        ... 其他策略配置
+    Request body:
+        strategy_name: Base strategy name
+        symbols: Array of symbols, e.g. ["Crypto:BTC/USDT", "Crypto:ETH/USDT"]
+        ... other strategy config
     """
     try:
+        user_id = g.user_id
         payload = request.get_json() or {}
-        payload['user_id'] = int(payload.get('user_id') or 1)
+        payload['user_id'] = user_id
         payload['strategy_type'] = payload.get('strategy_type') or 'IndicatorStrategy'
         
         result = get_strategy_service().batch_create_strategies(payload)
@@ -94,13 +102,13 @@ def batch_create_strategies():
         if result['success']:
             return jsonify({
                 'code': 1,
-                'msg': f"成功创建 {result['total_created']} 个策略",
+                'msg': f"Successfully created {result['total_created']} strategies",
                 'data': result
             })
         else:
             return jsonify({
                 'code': 0,
-                'msg': '批量创建失败',
+                'msg': 'Batch creation failed',
                 'data': result
             })
     except Exception as e:
@@ -110,31 +118,33 @@ def batch_create_strategies():
 
 
 @strategy_bp.route('/strategies/batch-start', methods=['POST'])
+@login_required
 def batch_start_strategies():
     """
-    批量启动策略
+    Batch start strategies
     
-    请求体:
-        strategy_ids: 策略ID数组
-        或
-        strategy_group_id: 策略组ID
+    Request body:
+        strategy_ids: Array of strategy IDs
+        or
+        strategy_group_id: Strategy group ID
     """
     try:
+        user_id = g.user_id
         payload = request.get_json() or {}
         strategy_ids = payload.get('strategy_ids') or []
         strategy_group_id = payload.get('strategy_group_id')
         
-        # 如果提供了策略组ID，获取组内所有策略
+        # If strategy_group_id provided, get all strategies in the group
         if strategy_group_id and not strategy_ids:
-            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id)
+            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id, user_id=user_id)
         
         if not strategy_ids:
-            return jsonify({'code': 0, 'msg': '请提供策略ID', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Please provide strategy IDs', 'data': None}), 400
         
-        # 先更新数据库状态
-        result = get_strategy_service().batch_start_strategies(strategy_ids)
+        # Update database status first
+        result = get_strategy_service().batch_start_strategies(strategy_ids, user_id=user_id)
         
-        # 然后启动执行器
+        # Then start executor
         executor = get_trading_executor()
         for sid in result.get('success_ids', []):
             try:
@@ -144,7 +154,7 @@ def batch_start_strategies():
         
         return jsonify({
             'code': 1 if result['success'] else 0,
-            'msg': f"成功启动 {len(result.get('success_ids', []))} 个策略",
+            'msg': f"Successfully started {len(result.get('success_ids', []))} strategies",
             'data': result
         })
     except Exception as e:
@@ -154,27 +164,29 @@ def batch_start_strategies():
 
 
 @strategy_bp.route('/strategies/batch-stop', methods=['POST'])
+@login_required
 def batch_stop_strategies():
     """
-    批量停止策略
+    Batch stop strategies
     
-    请求体:
-        strategy_ids: 策略ID数组
-        或
-        strategy_group_id: 策略组ID
+    Request body:
+        strategy_ids: Array of strategy IDs
+        or
+        strategy_group_id: Strategy group ID
     """
     try:
+        user_id = g.user_id
         payload = request.get_json() or {}
         strategy_ids = payload.get('strategy_ids') or []
         strategy_group_id = payload.get('strategy_group_id')
         
         if strategy_group_id and not strategy_ids:
-            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id)
+            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id, user_id=user_id)
         
         if not strategy_ids:
-            return jsonify({'code': 0, 'msg': '请提供策略ID', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Please provide strategy IDs', 'data': None}), 400
         
-        # 先停止执行器
+        # Stop executor first
         executor = get_trading_executor()
         for sid in strategy_ids:
             try:
@@ -182,12 +194,12 @@ def batch_stop_strategies():
             except Exception as e:
                 logger.error(f"Failed to stop executor for strategy {sid}: {e}")
         
-        # 然后更新数据库状态
-        result = get_strategy_service().batch_stop_strategies(strategy_ids)
+        # Then update database status
+        result = get_strategy_service().batch_stop_strategies(strategy_ids, user_id=user_id)
         
         return jsonify({
             'code': 1 if result['success'] else 0,
-            'msg': f"成功停止 {len(result.get('success_ids', []))} 个策略",
+            'msg': f"Successfully stopped {len(result.get('success_ids', []))} strategies",
             'data': result
         })
     except Exception as e:
@@ -197,40 +209,42 @@ def batch_stop_strategies():
 
 
 @strategy_bp.route('/strategies/batch-delete', methods=['DELETE'])
+@login_required
 def batch_delete_strategies():
     """
-    批量删除策略
+    Batch delete strategies
     
-    请求体:
-        strategy_ids: 策略ID数组
-        或
-        strategy_group_id: 策略组ID
+    Request body:
+        strategy_ids: Array of strategy IDs
+        or
+        strategy_group_id: Strategy group ID
     """
     try:
+        user_id = g.user_id
         payload = request.get_json() or {}
         strategy_ids = payload.get('strategy_ids') or []
         strategy_group_id = payload.get('strategy_group_id')
         
         if strategy_group_id and not strategy_ids:
-            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id)
+            strategy_ids = get_strategy_service().get_strategies_by_group(strategy_group_id, user_id=user_id)
         
         if not strategy_ids:
-            return jsonify({'code': 0, 'msg': '请提供策略ID', 'data': None}), 400
+            return jsonify({'code': 0, 'msg': 'Please provide strategy IDs', 'data': None}), 400
         
-        # 先停止执行器
+        # Stop executor first
         executor = get_trading_executor()
         for sid in strategy_ids:
             try:
                 executor.stop_strategy(sid)
             except Exception as e:
-                pass  # 忽略停止错误
+                pass  # Ignore stop errors
         
-        # 然后删除
-        result = get_strategy_service().batch_delete_strategies(strategy_ids)
+        # Then delete
+        result = get_strategy_service().batch_delete_strategies(strategy_ids, user_id=user_id)
         
         return jsonify({
             'code': 1 if result['success'] else 0,
-            'msg': f"成功删除 {len(result.get('success_ids', []))} 个策略",
+            'msg': f"Successfully deleted {len(result.get('success_ids', []))} strategies",
             'data': result
         })
     except Exception as e:
@@ -240,13 +254,15 @@ def batch_delete_strategies():
 
 
 @strategy_bp.route('/strategies/update', methods=['PUT'])
+@login_required
 def update_strategy():
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
         payload = request.get_json() or {}
-        ok = get_strategy_service().update_strategy(strategy_id, payload)
+        ok = get_strategy_service().update_strategy(strategy_id, payload, user_id=user_id)
         if not ok:
             return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
         return jsonify({'code': 1, 'msg': 'success', 'data': None})
@@ -257,12 +273,14 @@ def update_strategy():
 
 
 @strategy_bp.route('/strategies/delete', methods=['DELETE'])
+@login_required
 def delete_strategy():
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': None}), 400
-        ok = get_strategy_service().delete_strategy(strategy_id)
+        ok = get_strategy_service().delete_strategy(strategy_id, user_id=user_id)
         return jsonify({'code': 1 if ok else 0, 'msg': 'success' if ok else 'failed', 'data': None})
     except Exception as e:
         logger.error(f"delete_strategy failed: {str(e)}")
@@ -271,12 +289,20 @@ def delete_strategy():
 
 
 @strategy_bp.route('/strategies/trades', methods=['GET'])
+@login_required
 def get_trades():
-    """交易记录（从本地 SQLite 读取）"""
+    """Get trade records for the current user's strategy."""
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': {'trades': [], 'items': []}}), 400
+        
+        # Verify strategy belongs to user
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id)
+        if not st:
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': {'trades': [], 'items': []}}), 404
+        
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -299,12 +325,20 @@ def get_trades():
 
 
 @strategy_bp.route('/strategies/positions', methods=['GET'])
+@login_required
 def get_positions():
-    """持仓记录（从本地 SQLite 读取）"""
+    """Get position records for the current user's strategy."""
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': {'positions': [], 'items': []}}), 400
+        
+        # Verify strategy belongs to user
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id)
+        if not st:
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': {'positions': [], 'items': []}}), 404
+        
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
@@ -382,10 +416,10 @@ def get_positions():
                     cur.execute(
                         """
                         UPDATE qd_strategy_positions
-                        SET current_price = ?, unrealized_pnl = ?, pnl_percent = ?, updated_at = ?
+                        SET current_price = ?, unrealized_pnl = ?, pnl_percent = ?, updated_at = NOW()
                         WHERE id = ?
                         """,
-                        (float(cp or 0.0), float(pnl), float(pct), int(now), int(rr.get("id"))),
+                        (float(cp or 0.0), float(pnl), float(pct), int(rr.get("id"))),
                     )
                 except Exception:
                     pass
@@ -400,14 +434,18 @@ def get_positions():
 
 
 @strategy_bp.route('/strategies/equityCurve', methods=['GET'])
+@login_required
 def get_equity_curve():
-    """净值曲线（本地简单计算：initial_capital + 累计 profit）"""
+    """Get equity curve for the current user's strategy."""
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         if not strategy_id:
             return jsonify({'code': 0, 'msg': 'Missing strategy id parameter', 'data': []}), 400
 
-        st = get_strategy_service().get_strategy(strategy_id) or {}
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id) or {}
+        if not st:
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': []}), 404
         initial = float(st.get('initial_capital') or (st.get('trading_config') or {}).get('initial_capital') or 0)
         if initial <= 0:
             initial = 1000.0
@@ -447,14 +485,16 @@ def get_equity_curve():
 
 
 @strategy_bp.route('/strategies/stop', methods=['POST'])
+@login_required
 def stop_strategy():
     """
-    停止策略
+    Stop a strategy for the current user.
     
-    参数:
-        id: 策略ID
+    Params:
+        id: Strategy ID
     """
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         
         if not strategy_id:
@@ -464,18 +504,23 @@ def stop_strategy():
                 'data': None
             }), 400
         
-        # 获取策略类型
+        # Verify strategy belongs to user
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id)
+        if not st:
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
+        
+        # Get strategy type
         strategy_type = get_strategy_service().get_strategy_type(strategy_id)
         
         # Local backend: AI strategy executor was removed. Only indicator strategies are supported.
         if strategy_type == 'PromptBasedStrategy':
             return jsonify({'code': 0, 'msg': 'AI strategy has been removed; local edition does not support starting/stopping AI strategies', 'data': None}), 400
 
-        # 指标策略
+        # Indicator strategy
         get_trading_executor().stop_strategy(strategy_id)
         
-        # 更新策略状态
-        get_strategy_service().update_strategy_status(strategy_id, 'stopped')
+        # Update strategy status
+        get_strategy_service().update_strategy_status(strategy_id, 'stopped', user_id=user_id)
         
         return jsonify({
             'code': 1,
@@ -494,14 +539,16 @@ def stop_strategy():
 
 
 @strategy_bp.route('/strategies/start', methods=['POST'])
+@login_required
 def start_strategy():
     """
-    启动策略
+    Start a strategy for the current user.
     
-    参数:
-        id: 策略ID
+    Params:
+        id: Strategy ID
     """
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         
         if not strategy_id:
@@ -511,22 +558,27 @@ def start_strategy():
                 'data': None
             }), 400
         
-        # 获取策略类型
+        # Verify strategy belongs to user
+        st = get_strategy_service().get_strategy(strategy_id, user_id=user_id)
+        if not st:
+            return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
+        
+        # Get strategy type
         strategy_type = get_strategy_service().get_strategy_type(strategy_id)
         
-        # 更新策略状态
-        get_strategy_service().update_strategy_status(strategy_id, 'running')
+        # Update strategy status
+        get_strategy_service().update_strategy_status(strategy_id, 'running', user_id=user_id)
         
         # Local backend: AI strategy executor was removed. Only indicator strategies are supported.
         if strategy_type == 'PromptBasedStrategy':
             return jsonify({'code': 0, 'msg': 'AI strategy has been removed; local edition does not support starting AI strategies', 'data': None}), 400
 
-        # 指标策略
+        # Indicator strategy
         success = get_trading_executor().start_strategy(strategy_id)
         
         if not success:
-            # 如果启动失败，恢复状态
-            get_strategy_service().update_strategy_status(strategy_id, 'stopped')
+            # If start failed, restore status
+            get_strategy_service().update_strategy_status(strategy_id, 'stopped', user_id=user_id)
             return jsonify({
                 'code': 0,
                 'msg': 'Failed to start strategy executor',
@@ -550,12 +602,13 @@ def start_strategy():
 
 
 @strategy_bp.route('/strategies/test-connection', methods=['POST'])
+@login_required
 def test_connection():
     """
-    测试交易所连接
+    Test exchange connection.
     
-    请求体:
-        exchange_config: 交易所配置
+    Request body:
+        exchange_config: Exchange configuration
     """
     try:
         data = request.get_json() or {}
@@ -619,12 +672,13 @@ def test_connection():
 
 
 @strategy_bp.route('/strategies/get-symbols', methods=['POST'])
+@login_required
 def get_symbols():
     """
-    获取交易所交易对列表
+    Get exchange trading pairs list.
     
-    请求体:
-        exchange_config: 交易所配置
+    Request body:
+        exchange_config: Exchange configuration
     """
     try:
         data = request.get_json() or {}
@@ -662,9 +716,10 @@ def get_symbols():
 
 
 @strategy_bp.route('/strategies/preview-compile', methods=['POST'])
+@login_required
 def preview_compile():
     """
-    预览编译后的策略结果
+    Preview compiled strategy result.
     """
     try:
         data = request.get_json() or {}
@@ -708,9 +763,10 @@ def preview_compile():
 
 
 @strategy_bp.route('/strategies/notifications', methods=['GET'])
+@login_required
 def get_strategy_notifications():
     """
-    Strategy signal notifications (browser channel persistence).
+    Strategy signal notifications for the current user.
 
     Query:
       - id: strategy id (optional)
@@ -718,16 +774,39 @@ def get_strategy_notifications():
       - since_id: return rows with id > since_id (optional)
     """
     try:
+        user_id = g.user_id
         strategy_id = request.args.get('id', type=int)
         limit = request.args.get('limit', type=int) or 50
         limit = max(1, min(200, int(limit)))
         since_id = request.args.get('since_id', type=int) or 0
 
+        # Get user's strategy IDs for filtering notifications
+        user_strategy_ids = []
+        with get_db_connection() as db:
+            cur = db.cursor()
+            cur.execute("SELECT id FROM qd_strategies_trading WHERE user_id = ?", (user_id,))
+            rows = cur.fetchall() or []
+            user_strategy_ids = [r.get('id') for r in rows if r.get('id')]
+            cur.close()
+        
+        if not user_strategy_ids:
+            return jsonify({'code': 1, 'msg': 'success', 'data': {'items': []}})
+
         where = []
         args = []
+        
+        # Filter by user's strategies
         if strategy_id:
-            where.append("strategy_id = ?")
-            args.append(int(strategy_id))
+            if strategy_id in user_strategy_ids:
+                where.append("strategy_id = ?")
+                args.append(int(strategy_id))
+            else:
+                return jsonify({'code': 1, 'msg': 'success', 'data': {'items': []}})
+        else:
+            placeholders = ",".join(["?"] * len(user_strategy_ids))
+            where.append(f"strategy_id IN ({placeholders})")
+            args.extend(user_strategy_ids)
+        
         if since_id:
             where.append("id > ?")
             args.append(int(since_id))
@@ -756,19 +835,25 @@ def get_strategy_notifications():
 
 
 @strategy_bp.route('/strategies/notifications/read', methods=['POST'])
+@login_required
 def mark_notification_read():
-    """Mark a single notification as read."""
+    """Mark a single notification as read for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json(force=True, silent=True) or {}
         notification_id = data.get('id')
         if not notification_id:
             return jsonify({'code': 0, 'msg': 'Missing id'}), 400
 
+        # Only update notifications for user's strategies
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
-                "UPDATE qd_strategy_notifications SET is_read = 1 WHERE id = ?",
-                (int(notification_id),)
+                """
+                UPDATE qd_strategy_notifications SET is_read = 1 
+                WHERE id = ? AND strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = ?)
+                """,
+                (int(notification_id), user_id)
             )
             db.commit()
             cur.close()
@@ -780,12 +865,20 @@ def mark_notification_read():
 
 
 @strategy_bp.route('/strategies/notifications/read-all', methods=['POST'])
+@login_required
 def mark_all_notifications_read():
-    """Mark all notifications as read."""
+    """Mark all notifications as read for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
-            cur.execute("UPDATE qd_strategy_notifications SET is_read = 1")
+            cur.execute(
+                """
+                UPDATE qd_strategy_notifications SET is_read = 1 
+                WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = ?)
+                """,
+                (user_id,)
+            )
             db.commit()
             cur.close()
 
@@ -796,12 +889,20 @@ def mark_all_notifications_read():
 
 
 @strategy_bp.route('/strategies/notifications/clear', methods=['DELETE'])
+@login_required
 def clear_notifications():
-    """Clear all notifications (delete from database)."""
+    """Clear all notifications for the current user."""
     try:
+        user_id = g.user_id
         with get_db_connection() as db:
             cur = db.cursor()
-            cur.execute("DELETE FROM qd_strategy_notifications")
+            cur.execute(
+                """
+                DELETE FROM qd_strategy_notifications 
+                WHERE strategy_id IN (SELECT id FROM qd_strategies_trading WHERE user_id = ?)
+                """,
+                (user_id,)
+            )
             db.commit()
             cur.close()
 

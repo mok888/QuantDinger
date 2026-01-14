@@ -53,7 +53,7 @@
 
 ### QuantDinger 是什麼？
 
-QuantDinger 是一個**本地優先、隱私優先的量化交易基礎設施**。它完全運行在你的機器上，讓你完全控制自己的策略、交易數據和 API 密鑰。
+QuantDinger 是一個**本地優先、隱私優先、自託管的量化交易基礎設施**。它運行在你的機器/伺服器上，提供 **PostgreSQL 支持的多用戶帳號體系**，同時讓你完全控制自己的策略、交易數據和 API 密鑰。
 
 ### 為什麼選擇本地優先？
 
@@ -73,77 +73,11 @@ QuantDinger 包含一個內置的**基於 LLM 的多智能體研究系統**，�
 
 ### 核心價值
 
-- **🔓 Apache 2.0 開源**：完全寬鬆且商業友好。不像病毒式的 GPL/AGPL 協議，你真正擁有你的代碼和修改權。
+- **🔓 Apache 2.0 開源（代碼）**：寬鬆且商業友好。你可以在 Apache 2.0 下 fork/修改代碼，但需保留許可與署名等必要聲明。
 - **🐍 Python 原生 & 可視化**：使用標準 Python 編寫指標（比 PineScript 更簡單），並由 AI 輔助。直接在圖表上可視化信號——打造「本地版 TradingView」體驗。
 - **🤖 AI 閉環優化**：不僅運行策略，AI 還會分析回測結果並建議參數調整（止損/止盈/MACD 設置），形成閉環優化。
 - **🌍 全球市場接入**：統一系統支持加密貨幣（實盤）、美股/A股、外匯和期貨（數據/通知）。
 - **⚡ Docker & 清晰架構**：4 行命令極速部署。現代技術棧（Vue + Python），架構清晰，關注點分離。
-
----
-
-## 🏆 我們的合作夥伴與贊助商
-
-<div align="center">
-
-### 💼 值得信賴的交易所合作夥伴
-
-我們很自豪能與領先的加密貨幣交易所合作，為量化交易提供可靠的基礎設施。這些合作夥伴關係有助於支持 QuantDinger 的持續發展。
-
-<table>
-  <tr>
-    <td align="center" width="33.33%">
-      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
-        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
-      </a>
-      <br/><br/>
-      <strong>全球最大的加密貨幣交易所</strong><br/>
-      <small>現貨 • 期貨 • 槓桿交易</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
-        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
-      </a>
-      <br/><br/>
-      <strong>領先的衍生品平台</strong><br/>
-      <small>現貨 • 永續合約 • 期權</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
-        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
-      </a>
-      <br/><br/>
-      <strong>創新的跟單交易</strong><br/>
-      <small>現貨 • 期貨 • 社交交易</small>
-    </td>
-  </tr>
-</table>
-
-<p align="center">
-  <em>使用我們的合作夥伴鏈接，在享受相同交易體驗的同時支持 QuantDinger 的發展。</em>
-</p>
-
----
-
-### 💝 直接支持
-
-您的貢獻幫助我們維護和改進 QuantDinger。每一份捐贈都意義重大！
-
-**加密貨幣捐贈 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
-
-```
-0x96fa4962181bea077f8c7240efe46afbe73641a7
-```
-
-<p>
-  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
-  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
-</p>
-
-<p align="center">
-  <em>感謝您支持開源開發！🙏</em>
-</p>
-
-</div>
 
 ---
 
@@ -589,26 +523,82 @@ npm run serve
 
 ---
 
-## 💰 專案可持續性
+## 💼 商業授權與贊助（Commercial License & Sponsorship）
 
-QuantDinger 是開源且免費使用的。如果你覺得它有用，以下是一些支持專案持續發展的方式：
+QuantDinger 的代碼使用 **Apache License 2.0** 授權。但請注意：**Apache 2.0 不授予商標權**。QuantDinger 的名稱/Logo/品牌標識受商標與品牌政策約束（與代碼許可分離）：
+
+- **版權/署名**：你必須保留必要的版權與許可聲明（例如倉庫中的 LICENSE/NOTICE 等，以及代碼中的署名資訊）。
+- **商標（名稱/Logo/品牌）**：你不得使用 QuantDinger 的名稱/Logo/品牌來暗示背書或誤導來源；若再發佈修改版，一般需要移除/替換 QuantDinger 品牌標識，除非獲得書面許可。
+
+若你希望在再發佈版本中**保留/修改 QuantDinger 品牌展示**（包括 UI 品牌、Logo 使用等），請聯繫我們獲取 **商業授權**。
+
+另見：`TRADEMARKS.md`
+
+### 商業授權可獲得
+
+- **品牌/版權展示的商用授權**（以雙方約定為準）
+- **運維支持**：部署、升級、故障處理與維護建議
+- **諮詢服務**：架構評審、性能調優、策略工作流諮詢
+- **贊助商權益**：成為專案贊助商，可按約定展示你的 Logo/廣告（README/官網/應用內等）
+
+### 聯繫方式
+
+- **Telegram**： [QuantDinger Group](https://t.me/worldinbroker)
+- **Email**： [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
 
 ---
 
-### 商業服務
+### 💼 值得信賴的交易所合作夥伴（聯盟鏈接）
 
-我們提供專業服務，助你充分利用 QuantDinger：
+使用我們的合作夥伴鏈接，在享受相同交易體驗的同時支持 QuantDinger 的發展。
 
-| 服務 | 描述 |
-|---------|-------------|
-| **部署與設置** | 一對一協助服務器部署、配置和優化 |
-| **定制策略開發** | 針對特定需求和市場定制交易策略 |
-| **企業版升級** | 商業授權、優先支持和企業級高級功能 |
-| **培訓與咨詢** | 為你的交易團隊提供實戰培訓和戰略咨詢 |
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="33.33%">
+      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
+        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
+      </a>
+      <br/><br/>
+      <strong>全球最大的加密貨幣交易所</strong><br/>
+      <small>現貨 • 期貨 • 槓桿交易</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
+        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
+      </a>
+      <br/><br/>
+      <strong>領先的衍生品平台</strong><br/>
+      <small>現貨 • 永續合約 • 期權</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
+        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
+      </a>
+      <br/><br/>
+      <strong>創新的跟單交易</strong><br/>
+      <small>現貨 • 期貨 • 社交交易</small>
+    </td>
+  </tr>
+</table>
+</div>
 
-**感興趣？** 聯繫我們：
-- 📧 Email: [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
-- 💬 Telegram: [QuantDinger Group](https://t.me/quantdinger)
+---
+
+### 💝 直接支持（捐贈）
+
+你的貢獻幫助我們維護和改進 QuantDinger。
+
+**加密貨幣捐贈 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
+
+```
+0x96fa4962181bea077f8c7240efe46afbe73641a7
+```
+
+<p>
+  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
+  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
+</p>
 
 ---
 

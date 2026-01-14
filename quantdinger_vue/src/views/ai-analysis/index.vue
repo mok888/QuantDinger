@@ -331,9 +331,21 @@
                     >
                       {{ $t('dashboard.analysis.modal.history.viewResult') }}
                     </a-button>
-                    <!-- <span style="color: #999; font-size: 12px; margin-left: 12px;">
-                      {{ formatTime(item.createtime) }}
-                    </span> -->
+                    <a-popconfirm
+                      :title="$t('dashboard.analysis.modal.history.deleteConfirm')"
+                      :ok-text="$t('common.confirm')"
+                      :cancel-text="$t('common.cancel')"
+                      @confirm="deleteHistoryItem(item)"
+                    >
+                      <a-button
+                        type="link"
+                        size="small"
+                        icon="delete"
+                        style="color: #ff4d4f;"
+                      >
+                        {{ $t('dashboard.analysis.modal.history.delete') }}
+                      </a-button>
+                    </a-popconfirm>
                   </div>
                 </div>
               </template>
@@ -357,7 +369,7 @@
 <script>
 import { mapGetters, mapState } from 'vuex'
 import { getUserInfo } from '@/api/login'
-import { getWatchlist, addWatchlist, removeWatchlist, getWatchlistPrices, multiAnalysis, getAnalysisTaskStatus, getAnalysisHistoryList, getConfig, getMarketTypes, searchSymbols, getHotSymbols } from '@/api/market'
+import { getWatchlist, addWatchlist, removeWatchlist, getWatchlistPrices, multiAnalysis, getAnalysisTaskStatus, getAnalysisHistoryList, deleteAnalysisTask, getConfig, getMarketTypes, searchSymbols, getHotSymbols } from '@/api/market'
 
 import MetaverseAnalysis from './components/index'
 import { DEFAULT_AI_MODEL_MAP, mergeModelMaps, modelMapToOptions } from '@/config/aiModels'
@@ -456,6 +468,8 @@ export default {
     // Local-only mode: load watchlist immediately (userId defaults to 1).
     // This also prevents a blank watchlist if user info fetch is slow/fails.
     this.loadWatchlist()
+    // Check for any pending/running analysis tasks from previous session
+    this.checkPendingTasks()
   },
   mounted () {
     // 启动自选股价格定时刷新
@@ -549,29 +563,35 @@ export default {
         return
       }
 
+      // Reset state
       this.analyzing = true
+      this.currentTaskId = null
+
       const [market, symbol] = this.selectedSymbol.split(':')
-      // 获取当前语言设置
       const language = this.$store.getters.lang || 'zh-CN'
+      const useMultiAgent = this.$store.getters.useMultiAgent !== false
 
       try {
-        // 调用后端API创建分析任务（异步）
-        // 可以从配置或用户设置中获取 use_multi_agent，默认使用多智能体模式
-        const useMultiAgent = this.$store.getters.useMultiAgent !== false // 默认启用多智能体模式
-
+        // Call API to create analysis task
         const res = await multiAnalysis({
           userid: this.userId,
           market: market,
           symbol: symbol,
           language: language,
           use_multi_agent: useMultiAgent,
-          model: this.selectedModel // 传递选中的模型
+          model: this.selectedModel,
+          timeframe: '1D'
         })
 
         if (res && res.code === 1 && res.data) {
-          // 检查是否是缓存数据（直接返回分析结果）
-          if (res.data.overview || res.data.fundamental || res.data.technical) {
-            // 这是缓存数据，直接显示结果
+          if (res.data.task_id) {
+            // Task created, start polling for results
+            // Frontend will show simulation animation while backend processes
+            this.currentTaskId = Number(res.data.task_id) || null
+            this.$message.info(this.$t('dashboard.analysis.message.taskCreated') || 'Analysis task created, processing...')
+            this.startTaskStatusPolling()
+          } else if (res.data.overview || res.data.fundamental || res.data.technical) {
+            // Direct result (legacy support)
             this.analysisResults = {
               overview: res.data.overview || null,
               fundamental: res.data.fundamental || null,
@@ -584,15 +604,8 @@ export default {
               risk_debate: res.data.risk_debate || null,
               final_decision: res.data.final_decision || null
             }
-            this.$message.success(this.$t('dashboard.analysis.message.analysisCompleteCache'))
+            this.$message.success(this.$t('dashboard.analysis.message.analysisComplete'))
             this.analyzing = false
-          } else if (res.data.task_id) {
-            // 这是新任务，需要轮询
-            this.currentTaskId = Number(res.data.task_id) || null
-            this.$message.info(this.$t('dashboard.analysis.message.taskCreated'))
-
-            // 开始轮询任务状态
-            this.startTaskStatusPolling()
           } else {
             throw new Error('返回数据格式错误')
           }
@@ -600,7 +613,7 @@ export default {
           throw new Error(res?.msg || '创建分析任务失败')
         }
       } catch (error) {
-        // 如果错误信息包含QDT相关提示，直接显示；否则显示默认错误
+        console.error('Analysis failed:', error)
         const errorMsg = error?.response?.data?.msg || error?.message || this.$t('dashboard.analysis.message.analysisFailed')
         this.$message.error(errorMsg)
         this.analyzing = false
@@ -680,6 +693,47 @@ export default {
         this.historyLoading = false
       }
     },
+    // Check for pending/processing tasks when user returns to page
+    async checkPendingTasks () {
+      try {
+        const res = await getAnalysisHistoryList({
+          userid: this.userId,
+          page: 1,
+          pagesize: 5
+        })
+
+        if (res && res.code === 1 && res.data && res.data.list) {
+          // Find the most recent pending task
+          const pendingTask = res.data.list.find(t => t.status === 'pending')
+
+          if (pendingTask) {
+            // There's a pending task - show notification and start polling
+            this.currentTaskId = pendingTask.id
+            this.selectedSymbol = `${pendingTask.market}:${pendingTask.symbol}`
+            this.analyzing = true
+            this.$message.info(this.$t('dashboard.analysis.message.resumingAnalysis') || 'Resuming analysis in progress...')
+            this.startTaskStatusPolling()
+          } else {
+            // Check if most recent task just completed (within last 30 seconds)
+            const recentCompleted = res.data.list.find(t => {
+              if (t.status !== 'completed') return false
+              const completedAt = t.completetime
+              if (!completedAt) return false
+              const now = Math.floor(Date.now() / 1000)
+              return (now - completedAt) < 30 // Within 30 seconds
+            })
+
+            if (recentCompleted) {
+              // Show result of recently completed task
+              this.viewHistoryResult(recentCompleted)
+            }
+          }
+        }
+      } catch (error) {
+        // Silent fail - not critical
+        console.warn('Failed to check pending tasks:', error)
+      }
+    },
     // 查看历史分析结果
     async viewHistoryResult (task) {
       if (task.status !== 'completed') {
@@ -716,6 +770,20 @@ export default {
         }
       } catch (error) {
         this.$message.error(this.$t('dashboard.analysis.message.analysisFailed'))
+      }
+    },
+    // Delete history item
+    async deleteHistoryItem (item) {
+      try {
+        const res = await deleteAnalysisTask({ task_id: item.id })
+        if (res && res.code === 1) {
+          this.$message.success(this.$t('dashboard.analysis.message.deleteSuccess'))
+          this.loadHistoryList()
+        } else {
+          this.$message.error(res?.msg || this.$t('dashboard.analysis.message.deleteFailed'))
+        }
+      } catch (error) {
+        this.$message.error(this.$t('dashboard.analysis.message.deleteFailed'))
       }
     },
     // 格式化时间

@@ -97,6 +97,227 @@ class AgentCoordinator:
         self.neutral_analyst = NeutralAnalyst()
         self.safe_analyst = SafeAnalyst()
     
+    def run_analysis_stream(self, market: str, symbol: str, language: str = 'zh-CN', model: str = None, timeframe: str = "1D", on_progress=None):
+        """
+        Run the full multi-agent analysis workflow with progress callbacks.
+        
+        Args:
+            on_progress: Callback function that receives (agent_name: str, status: str, result: Optional[dict])
+                        status can be: 'started', 'completed', 'error'
+        
+        Yields:
+            Progress events as dicts: { 'agent': str, 'status': str, 'result': dict or None }
+        """
+        logger.info(f"Multi-agent stream analysis start: {market}:{symbol}, model={model}, language={language}")
+        
+        def emit_progress(agent: str, status: str, result: dict = None):
+            """Emit progress event."""
+            if on_progress:
+                on_progress(agent, status, result)
+        
+        # Build base context
+        from .tools import AgentTools
+        tools = AgentTools()
+        
+        emit_progress('data_collection', 'started', None)
+        
+        # 1) Base data
+        current_price = tools.get_current_price(market, symbol)
+        company_data = tools.get_company_data(market, symbol, language=language)
+        
+        # Normalize timeframe
+        tf = (timeframe or "1D").strip()
+        
+        # 2) Kline + fundamentals
+        kline_data = tools.get_stock_data(market, symbol, days=30, timeframe=tf)
+        fundamental_data = tools.get_fundamental_data(market, symbol)
+        indicators = tools.calculate_technical_indicators(kline_data or [])
+        
+        # 3) News (Finnhub + web search)
+        company_name = company_data.get('name', symbol) if company_data else symbol
+        news_data = tools.get_news(market, symbol, days=7, company_name=company_name)
+        
+        base_data = {
+            "market": market,
+            "symbol": symbol,
+            "current_price": current_price,
+            "kline_data": kline_data,
+            "fundamental_data": fundamental_data,
+            "company_data": company_data,
+            "news_data": news_data,
+            "indicators": indicators,
+        }
+        
+        context = {
+            "market": market,
+            "symbol": symbol,
+            "language": language,
+            "model": model,
+            "timeframe": tf,
+            "memory_features": {
+                "timeframe": tf,
+                "price": (current_price or {}).get("price"),
+                "changePercent": (current_price or {}).get("changePercent"),
+                "indicators": indicators,
+            },
+            "base_data": base_data
+        }
+        
+        emit_progress('data_collection', 'completed', None)
+        
+        # Phase 1: Analysts (parallel but report individually)
+        logger.info("Phase 1: Analyst team")
+        
+        # Fundamental Analyst
+        emit_progress('fundamental', 'started', None)
+        fundamental_report = self.fundamental_analyst.analyze(context)
+        emit_progress('fundamental', 'completed', fundamental_report.get('data', {}))
+        
+        # Technical Analyst (market_analyst)
+        emit_progress('technical', 'started', None)
+        market_report = self.market_analyst.analyze(context)
+        emit_progress('technical', 'completed', market_report.get('data', {}))
+        
+        # News Analyst
+        emit_progress('news', 'started', None)
+        news_report = self.news_analyst.analyze(context)
+        emit_progress('news', 'completed', news_report.get('data', {}))
+        
+        # Sentiment Analyst
+        emit_progress('sentiment', 'started', None)
+        sentiment_report = self.sentiment_analyst.analyze(context)
+        emit_progress('sentiment', 'completed', sentiment_report.get('data', {}))
+        
+        # Risk Analyst
+        emit_progress('risk', 'started', None)
+        risk_report = self.risk_analyst.analyze(context)
+        emit_progress('risk', 'completed', risk_report.get('data', {}))
+        
+        # Update context with analyst outputs
+        context.update({
+            "market_report": market_report,
+            "fundamental_report": fundamental_report,
+            "news_report": news_report,
+            "sentiment_report": sentiment_report,
+            "risk_report": risk_report,
+        })
+        
+        # Phase 2: Bull/Bear debate
+        logger.info("Phase 2: Research debate")
+        
+        emit_progress('debate_bull', 'started', None)
+        bull_argument = self.bull_researcher.analyze(context)
+        emit_progress('debate_bull', 'completed', bull_argument.get('data', {}))
+        
+        emit_progress('debate_bear', 'started', None)
+        bear_argument = self.bear_researcher.analyze(context)
+        emit_progress('debate_bear', 'completed', bear_argument.get('data', {}))
+        
+        context["bull_argument"] = bull_argument
+        context["bear_argument"] = bear_argument
+        
+        # Research manager decision
+        emit_progress('debate_research', 'started', None)
+        research_decision = self._make_research_decision(bull_argument, bear_argument, context)
+        context["research_decision"] = research_decision
+        emit_progress('debate_research', 'completed', {'research_decision': research_decision})
+        
+        # Phase 3: Trader decision
+        logger.info("Phase 3: Trader decision")
+        emit_progress('trader_decision', 'started', None)
+        trader_result = self.trader_agent.analyze(context)
+        trader_plan = trader_result.get('data', {}).get('trading_plan', {})
+        context["trader_plan"] = trader_plan
+        emit_progress('trader_decision', 'completed', trader_result.get('data', {}))
+        
+        # Phase 4: Risk debate
+        logger.info("Phase 4: Risk debate")
+        
+        emit_progress('risk_debate_risky', 'started', None)
+        risky_result = self.risky_analyst.analyze(context)
+        emit_progress('risk_debate_risky', 'completed', risky_result.get('data', {}))
+        
+        emit_progress('risk_debate_neutral', 'started', None)
+        neutral_result = self.neutral_analyst.analyze(context)
+        emit_progress('risk_debate_neutral', 'completed', neutral_result.get('data', {}))
+        
+        emit_progress('risk_debate_safe', 'started', None)
+        safe_result = self.safe_analyst.analyze(context)
+        emit_progress('risk_debate_safe', 'completed', safe_result.get('data', {}))
+        
+        # Final decision
+        logger.info("Phase 5: Final decision")
+        emit_progress('final_decision', 'started', None)
+        final_decision = self._make_risk_decision(risky_result, neutral_result, safe_result, trader_result, context)
+        emit_progress('final_decision', 'completed', final_decision)
+        
+        # Generate overview
+        emit_progress('overview', 'started', None)
+        overview = self._generate_overview(context, final_decision)
+        emit_progress('overview', 'completed', overview)
+        
+        # Record for reflection
+        if self.reflection_service and final_decision.get('decision') in ['BUY', 'SELL', 'HOLD']:
+            try:
+                self.reflection_service.record_analysis(
+                    market=market,
+                    symbol=symbol,
+                    price=base_data.get('current_price', {}).get('price'),
+                    decision=final_decision.get('decision'),
+                    confidence=final_decision.get('confidence', 50),
+                    reasoning=final_decision.get('reasoning', ''),
+                    check_days=7
+                )
+            except Exception as e:
+                logger.warning(f"Record reflection failed: {e}")
+        
+        # Build final result
+        debate_data = {
+            "bull": bull_argument.get('data', {}) if bull_argument.get('data') else {},
+            "bear": bear_argument.get('data', {}) if bear_argument.get('data') else {},
+            "research_decision": research_decision if research_decision else "Analyzing..."
+        }
+        
+        trader_decision_data = trader_result.get('data', {}) if trader_result.get('data') else {
+            "decision": "HOLD",
+            "confidence": 50,
+            "reasoning": "Analyzing...",
+            "trading_plan": {},
+            "report": "Analyzing..."
+        }
+        
+        risk_debate_data = {
+            "risky": risky_result.get('data', {}) if risky_result.get('data') else {},
+            "neutral": neutral_result.get('data', {}) if neutral_result.get('data') else {},
+            "safe": safe_result.get('data', {}) if safe_result.get('data') else {}
+        }
+        
+        if not final_decision or (isinstance(final_decision, dict) and len(final_decision) == 0):
+            final_decision = {
+                "decision": "HOLD",
+                "confidence": 50,
+                "reasoning": "Analyzing...",
+                "risk_summary": {},
+                "recommendation": "Analyzing..."
+            }
+        
+        result = {
+            "overview": overview,
+            "fundamental": fundamental_report.get('data', {}),
+            "technical": market_report.get('data', {}),
+            "news": news_report.get('data', {}),
+            "sentiment": sentiment_report.get('data', {}),
+            "risk": risk_report.get('data', {}),
+            "debate": debate_data,
+            "trader_decision": trader_decision_data,
+            "risk_debate": risk_debate_data,
+            "final_decision": final_decision,
+            "error": None
+        }
+        
+        logger.info(f"Multi-agent stream analysis completed: {market}:{symbol}")
+        return result
+
     def run_analysis(self, market: str, symbol: str, language: str = 'zh-CN', model: str = None, timeframe: str = "1D") -> Dict[str, Any]:
         """
         Run the full multi-agent analysis workflow.

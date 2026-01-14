@@ -1,11 +1,14 @@
 """
 Settings API - 读取和保存 .env 配置
+
+Admin-only endpoints for system configuration management.
 """
 import os
 import re
 from flask import Blueprint, request, jsonify
 from app.utils.logger import get_logger
 from app.utils.config_loader import clear_config_cache
+from app.utils.auth import login_required, admin_required
 
 logger = get_logger(__name__)
 
@@ -72,6 +75,13 @@ CONFIG_SCHEMA = {
                 'type': 'password',
                 'default': '123456',
                 'description': 'Administrator login password. MUST change in production'
+            },
+            {
+                'key': 'ADMIN_EMAIL',
+                'label': 'Admin Email',
+                'type': 'text',
+                'default': 'admin@example.com',
+                'description': 'Administrator email for password reset and notifications'
             },
         ]
     },
@@ -654,11 +664,245 @@ CONFIG_SCHEMA = {
         ]
     },
 
-    # ==================== 13. 应用配置 ====================
+    # ==================== 13. 注册与安全 ====================
+    'security': {
+        'title': 'Registration & Security',
+        'icon': 'safety',
+        'order': 13,
+        'items': [
+            {
+                'key': 'ENABLE_REGISTRATION',
+                'label': 'Enable Registration',
+                'type': 'boolean',
+                'default': 'True',
+                'description': 'Allow new users to register accounts'
+            },
+            {
+                'key': 'TURNSTILE_SITE_KEY',
+                'label': 'Turnstile Site Key',
+                'type': 'text',
+                'required': False,
+                'link': 'https://dash.cloudflare.com/?to=/:account/turnstile',
+                'link_text': 'settings.link.getTurnstileKey',
+                'description': 'Cloudflare Turnstile site key for CAPTCHA verification'
+            },
+            {
+                'key': 'TURNSTILE_SECRET_KEY',
+                'label': 'Turnstile Secret Key',
+                'type': 'password',
+                'required': False,
+                'description': 'Cloudflare Turnstile secret key'
+            },
+            {
+                'key': 'FRONTEND_URL',
+                'label': 'Frontend URL',
+                'type': 'text',
+                'default': 'http://localhost:8080',
+                'description': 'Frontend URL for OAuth redirects'
+            },
+            {
+                'key': 'GOOGLE_CLIENT_ID',
+                'label': 'Google Client ID',
+                'type': 'text',
+                'required': False,
+                'link': 'https://console.cloud.google.com/apis/credentials',
+                'link_text': 'settings.link.getGoogleCredentials',
+                'description': 'Google OAuth Client ID'
+            },
+            {
+                'key': 'GOOGLE_CLIENT_SECRET',
+                'label': 'Google Client Secret',
+                'type': 'password',
+                'required': False,
+                'description': 'Google OAuth Client Secret'
+            },
+            {
+                'key': 'GOOGLE_REDIRECT_URI',
+                'label': 'Google Redirect URI',
+                'type': 'text',
+                'default': 'http://localhost:5000/api/auth/oauth/google/callback',
+                'description': 'Google OAuth callback URL'
+            },
+            {
+                'key': 'GITHUB_CLIENT_ID',
+                'label': 'GitHub Client ID',
+                'type': 'text',
+                'required': False,
+                'link': 'https://github.com/settings/developers',
+                'link_text': 'settings.link.getGithubCredentials',
+                'description': 'GitHub OAuth Client ID'
+            },
+            {
+                'key': 'GITHUB_CLIENT_SECRET',
+                'label': 'GitHub Client Secret',
+                'type': 'password',
+                'required': False,
+                'description': 'GitHub OAuth Client Secret'
+            },
+            {
+                'key': 'GITHUB_REDIRECT_URI',
+                'label': 'GitHub Redirect URI',
+                'type': 'text',
+                'default': 'http://localhost:5000/api/auth/oauth/github/callback',
+                'description': 'GitHub OAuth callback URL'
+            },
+            {
+                'key': 'SECURITY_IP_MAX_ATTEMPTS',
+                'label': 'IP Max Failed Attempts',
+                'type': 'number',
+                'default': '10',
+                'description': 'Block IP after this many failed login attempts'
+            },
+            {
+                'key': 'SECURITY_IP_WINDOW_MINUTES',
+                'label': 'IP Window (minutes)',
+                'type': 'number',
+                'default': '5',
+                'description': 'Time window for counting IP failed attempts'
+            },
+            {
+                'key': 'SECURITY_IP_BLOCK_MINUTES',
+                'label': 'IP Block Duration (minutes)',
+                'type': 'number',
+                'default': '15',
+                'description': 'How long to block IP after exceeding limit'
+            },
+            {
+                'key': 'SECURITY_ACCOUNT_MAX_ATTEMPTS',
+                'label': 'Account Max Failed Attempts',
+                'type': 'number',
+                'default': '5',
+                'description': 'Lock account after this many failed login attempts'
+            },
+            {
+                'key': 'SECURITY_ACCOUNT_WINDOW_MINUTES',
+                'label': 'Account Window (minutes)',
+                'type': 'number',
+                'default': '60',
+                'description': 'Time window for counting account failed attempts'
+            },
+            {
+                'key': 'SECURITY_ACCOUNT_BLOCK_MINUTES',
+                'label': 'Account Block Duration (minutes)',
+                'type': 'number',
+                'default': '30',
+                'description': 'How long to lock account after exceeding limit'
+            },
+            {
+                'key': 'VERIFICATION_CODE_EXPIRE_MINUTES',
+                'label': 'Verification Code Expiry (minutes)',
+                'type': 'number',
+                'default': '10',
+                'description': 'Email verification code validity period'
+            },
+            {
+                'key': 'VERIFICATION_CODE_RATE_LIMIT',
+                'label': 'Code Rate Limit (seconds)',
+                'type': 'number',
+                'default': '60',
+                'description': 'Minimum time between verification code requests per email'
+            },
+            {
+                'key': 'VERIFICATION_CODE_IP_HOURLY_LIMIT',
+                'label': 'Code Hourly Limit per IP',
+                'type': 'number',
+                'default': '10',
+                'description': 'Maximum verification codes per IP per hour'
+            },
+            {
+                'key': 'VERIFICATION_CODE_MAX_ATTEMPTS',
+                'label': 'Code Max Attempts',
+                'type': 'number',
+                'default': '5',
+                'description': 'Maximum attempts to verify a code before lockout'
+            },
+            {
+                'key': 'VERIFICATION_CODE_LOCK_MINUTES',
+                'label': 'Code Lock Minutes',
+                'type': 'number',
+                'default': '30',
+                'description': 'Lockout duration after exceeding max attempts'
+            },
+        ]
+    },
+
+    # ==================== 14. 计费配置 ====================
+    'billing': {
+        'title': 'Billing & Credits',
+        'icon': 'dollar',
+        'order': 14,
+        'items': [
+            {
+                'key': 'BILLING_ENABLED',
+                'label': 'Enable Billing',
+                'type': 'boolean',
+                'default': 'False',
+                'description': 'Enable billing system. When enabled, users need credits to use certain features'
+            },
+            {
+                'key': 'BILLING_VIP_BYPASS',
+                'label': 'VIP Free',
+                'type': 'boolean',
+                'default': 'True',
+                'description': 'VIP users can use all paid features for free during VIP period'
+            },
+            {
+                'key': 'BILLING_COST_AI_ANALYSIS',
+                'label': 'AI Analysis Cost',
+                'type': 'number',
+                'default': '10',
+                'description': 'Credits consumed per AI analysis request'
+            },
+            {
+                'key': 'BILLING_COST_STRATEGY_RUN',
+                'label': 'Strategy Run Cost',
+                'type': 'number',
+                'default': '5',
+                'description': 'Credits consumed when starting a strategy'
+            },
+            {
+                'key': 'BILLING_COST_BACKTEST',
+                'label': 'Backtest Cost',
+                'type': 'number',
+                'default': '3',
+                'description': 'Credits consumed per backtest run'
+            },
+            {
+                'key': 'BILLING_COST_PORTFOLIO_MONITOR',
+                'label': 'Portfolio Monitor Cost',
+                'type': 'number',
+                'default': '8',
+                'description': 'Credits consumed per portfolio AI monitoring run'
+            },
+            {
+                'key': 'RECHARGE_TELEGRAM_URL',
+                'label': 'Recharge Telegram URL',
+                'type': 'text',
+                'default': 'https://t.me/your_support_bot',
+                'description': 'Telegram customer service URL for recharge inquiries'
+            },
+            {
+                'key': 'CREDITS_REGISTER_BONUS',
+                'label': 'Register Bonus',
+                'type': 'number',
+                'default': '100',
+                'description': 'Credits awarded to new users on registration'
+            },
+            {
+                'key': 'CREDITS_REFERRAL_BONUS',
+                'label': 'Referral Bonus',
+                'type': 'number',
+                'default': '50',
+                'description': 'Credits awarded to referrer when someone signs up with their code'
+            },
+        ]
+    },
+
+    # ==================== 15. 应用配置 ====================
     'app': {
         'title': 'Application',
         'icon': 'appstore',
-        'order': 13,
+        'order': 15,
         'items': [
             {
                 'key': 'CORS_ORIGINS',
@@ -791,8 +1035,10 @@ def write_env_file(env_values):
 
 
 @settings_bp.route('/schema', methods=['GET'])
+@login_required
+@admin_required
 def get_settings_schema():
-    """获取配置项定义"""
+    """获取配置项定义 (admin only)"""
     return jsonify({
         'code': 1,
         'msg': 'success',
@@ -801,8 +1047,10 @@ def get_settings_schema():
 
 
 @settings_bp.route('/values', methods=['GET'])
+@login_required
+@admin_required
 def get_settings_values():
-    """获取当前配置值 - 包括敏感信息（真实值）"""
+    """获取当前配置值 - 包括敏感信息（真实值）(admin only)"""
     env_values = read_env_file()
     
     # 构建返回数据，返回真实值
@@ -825,8 +1073,10 @@ def get_settings_values():
 
 
 @settings_bp.route('/save', methods=['POST'])
+@login_required
+@admin_required
 def save_settings():
-    """保存配置"""
+    """保存配置 (admin only)"""
     try:
         data = request.get_json()
         if not data:
@@ -878,8 +1128,10 @@ def save_settings():
 
 
 @settings_bp.route('/openrouter-balance', methods=['GET'])
+@login_required
+@admin_required
 def get_openrouter_balance():
-    """查询 OpenRouter 账户余额"""
+    """查询 OpenRouter 账户余额 (admin only)"""
     try:
         import requests
         from app.config.api_keys import APIKeys
@@ -954,8 +1206,10 @@ def get_openrouter_balance():
 
 
 @settings_bp.route('/test-connection', methods=['POST'])
+@login_required
+@admin_required
 def test_connection():
-    """测试API连接"""
+    """测试API连接 (admin only)"""
     try:
         data = request.get_json()
         service = data.get('service')

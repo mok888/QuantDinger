@@ -1083,8 +1083,8 @@ export default {
       try {
         const res = await request({
           url: '/api/indicator/getIndicators',
-          method: 'post',
-          data: {
+          method: 'get',
+          params: {
             userid: userId.value
           }
         })

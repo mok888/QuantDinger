@@ -53,7 +53,7 @@
 
 ### QuantDinger 是什么？
 
-QuantDinger 是一个**本地优先、隐私优先的量化交易基础设施**。它完全运行在你的机器上，让你完全控制自己的策略、交易数据和 API 密钥。
+QuantDinger 是一个**本地优先、隐私优先、自托管的量化交易基础设施**。它运行在你的机器/服务器上，提供 **PostgreSQL 支持的多用户账号体系**，同时让你完全控制自己的策略、交易数据和 API 密钥。
 
 ### 为什么选择本地优先？
 
@@ -73,77 +73,11 @@ QuantDinger 包含一个内置的**基于 LLM 的多智能体研究系统**，�
 
 ### 核心价值
 
-- **🔓 Apache 2.0 开源**：完全宽松且商业友好。不像病毒式的 GPL/AGPL 协议，你真正拥有你的代码和修改权。
+- **🔓 Apache 2.0 开源（代码）**：宽松且商业友好。你可以在 Apache 2.0 下 fork/修改代码，但需保留许可与署名等必要声明。
 - **🐍 Python 原生 & 可视化**：使用标准 Python 编写指标（比 PineScript 更简单），并由 AI 辅助。直接在图表上可视化信号——打造“本地版 TradingView”体验。
 - **🤖 AI 闭环优化**：不仅运行策略，AI 还会分析回测结果并建议参数调整（止损/止盈/MACD 设置），形成闭环优化。
 - **🌍 全球市场接入**：统一系统支持加密货币（实盘）、美股/A股、外汇和期货（数据/通知）。
 - **⚡ Docker & 清晰架构**：4 行命令极速部署。现代技术栈（Vue + Python），架构清晰，关注点分离。
-
----
-
-## 🏆 我们的合作伙伴与赞助商
-
-<div align="center">
-
-### 💼 值得信赖的交易所合作伙伴
-
-我们很自豪能与领先的加密货币交易所合作，为量化交易提供可靠的基础设施。这些合作伙伴关系有助于支持 QuantDinger 的持续发展。
-
-<table>
-  <tr>
-    <td align="center" width="33.33%">
-      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
-        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
-      </a>
-      <br/><br/>
-      <strong>全球最大的加密货币交易所</strong><br/>
-      <small>现货 • 期货 • 杠杆交易</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
-        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
-      </a>
-      <br/><br/>
-      <strong>领先的衍生品平台</strong><br/>
-      <small>现货 • 永续合约 • 期权</small>
-    </td>
-    <td align="center" width="33.33%">
-      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
-        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
-      </a>
-      <br/><br/>
-      <strong>创新的跟单交易</strong><br/>
-      <small>现货 • 期货 • 社交交易</small>
-    </td>
-  </tr>
-</table>
-
-<p align="center">
-  <em>使用我们的合作伙伴链接，在享受相同交易体验的同时支持 QuantDinger 的发展。</em>
-</p>
-
----
-
-### 💝 直接支持
-
-您的贡献帮助我们维护和改进 QuantDinger。每一份捐赠都意义重大！
-
-**加密货币捐赠 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
-
-```
-0x96fa4962181bea077f8c7240efe46afbe73641a7
-```
-
-<p>
-  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
-  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
-</p>
-
-<p align="center">
-  <em>感谢您支持开源开发！🙏</em>
-</p>
-
-</div>
 
 ---
 
@@ -394,7 +328,7 @@ score = w_{sim}\cdot sim + w_{recency}\cdot recency + w_{returns}\cdot returns\_
 
 ### 7. 技术栈
 
-- **后端**：Python (Flask) + SQLite + Redis（可选）
+- **后端**：Python (Flask) + PostgreSQL + Redis（可选）
 - **前端**：Vue 2 + Ant Design Vue + KlineCharts/ECharts
 - **部署**：Docker Compose
 
@@ -480,7 +414,7 @@ QuantDinger 为全球用户构建，提供全面的国际化支持：
 │   (Flask + 策略运行时)       │
 └──────────────┬──────────────┘
                │
-               ├─ SQLite (quantdinger.db)
+               ├─ PostgreSQL（多用户支持）
                ├─ Redis (可选缓存)
                └─ 数据提供商 / LLMs / 交易所
 ```
@@ -619,26 +553,82 @@ npm run serve
 
 ---
 
-## 💰 项目可持续性
+## 💼 商业授权与赞助（Commercial License & Sponsorship）
 
-QuantDinger 是开源且免费使用的。如果你觉得它有用，以下是一些支持项目持续发展的方式：
+QuantDinger 的代码使用 **Apache License 2.0** 授权。但需要注意：**Apache 2.0 不授予商标权**。QuantDinger 的名称/Logo/品牌标识受商标与品牌政策约束（与代码许可分离）：
+
+- **版权/署名**：你必须保留必要的版权与许可声明（例如仓库中的 LICENSE/NOTICE 等，以及代码中的署名信息）。
+- **商标（名称/Logo/品牌）**：你不得使用 QuantDinger 的名称/Logo/品牌来暗示背书或误导来源；若再发布修改版，一般需要移除/替换 QuantDinger 品牌标识，除非获得书面许可。
+
+如果你希望在再发布版本中**保留/修改 QuantDinger 品牌展示**（包括 UI 品牌、Logo 使用等），请联系我们获取 **商业授权**。
+
+另见：`TRADEMARKS.md`
+
+### 商业授权可获得
+
+- **品牌/版权展示的商用授权**（以双方约定为准）
+- **运维支持**：部署、升级、故障处理与维护建议
+- **咨询服务**：架构评审、性能调优、策略工作流咨询
+- **赞助商权益**：成为项目赞助商，可按约定展示你的 Logo/广告（README/官网/应用内等）
+
+### 联系方式
+
+- **Telegram**： [QuantDinger Group](https://t.me/worldinbroker)
+- **Email**： [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
 
 ---
 
-### 专业服务
+### 💼 值得信赖的交易所合作伙伴（联盟链接）
 
-提供以下专业服务：
+使用我们的合作伙伴链接，在享受相同交易体验的同时支持 QuantDinger 的发展。
 
-| 服务 | 描述 |
-|---------|-------------|
-| **部署与设置** | 一对一协助服务器部署、配置和优化 |
-| **定制策略开发** | 针对特定需求和市场定制交易策略 |
-| **企业版升级** | 商业授权、优先支持和企业级高级功能 |
-| **培训与咨询** | 为你的交易团队提供实战培训和战略咨询 |
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="33.33%">
+      <a href="https://www.bmwweb.ac/referral/earn-together/refer2earn-usdc/claim?hl=zh-CN&ref=GRO_28502_9OSOJ" target="_blank">
+        <img src="https://img.shields.io/badge/Binance-Exchange-F0B90B?style=for-the-badge&logo=binance&logoColor=white" alt="Binance" />
+      </a>
+      <br/><br/>
+      <strong>全球最大的加密货币交易所</strong><br/>
+      <small>现货 • 期货 • 杠杆交易</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://www.bjwebptyiou.com/join/14449926" target="_blank">
+        <img src="https://img.shields.io/badge/OKX-Exchange-000000?style=for-the-badge&logo=okx&logoColor=white" alt="OKX" />
+      </a>
+      <br/><br/>
+      <strong>领先的衍生品平台</strong><br/>
+      <small>现货 • 永续合约 • 期权</small>
+    </td>
+    <td align="center" width="33.33%">
+      <a href="https://share.glassgs.com/u/H8XZGS71" target="_blank">
+        <img src="https://img.shields.io/badge/Bitget-Exchange-1F2937?style=for-the-badge&logo=bitget&logoColor=white" alt="Bitget" />
+      </a>
+      <br/><br/>
+      <strong>创新的跟单交易</strong><br/>
+      <small>现货 • 期货 • 社交交易</small>
+    </td>
+  </tr>
+</table>
+</div>
 
-**感兴趣？** 联系我们：
-- 📧 Email: [brokermr810@gmail.com](mailto:brokermr810@gmail.com)
-- 💬 Telegram: [QuantDinger Group](https://t.me/quantdinger)
+---
+
+### 💝 直接支持（捐赠）
+
+你的贡献帮助我们维护和改进 QuantDinger。
+
+**加密货币捐赠 (ERC-20 / BEP-20 / Polygon / Arbitrum)**
+
+```
+0x96fa4962181bea077f8c7240efe46afbe73641a7
+```
+
+<p>
+  <img src="https://img.shields.io/badge/USDT-Accepted-26A17B?style=for-the-badge&logo=tether&logoColor=white" alt="USDT">
+  <img src="https://img.shields.io/badge/ETH-Accepted-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="ETH">
+</p>
 
 ---
 

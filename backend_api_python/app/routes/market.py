@@ -2,7 +2,7 @@
 Market API routes (local-only).
 Provides watchlist, market metadata, symbol search, and pricing helpers for the frontend.
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import traceback
 import json
 import time
@@ -13,6 +13,7 @@ from app.utils.logger import get_logger
 from app.utils.cache import CacheManager
 from app.utils.db import get_db_connection
 from app.utils.config_loader import load_addon_config
+from app.utils.auth import login_required
 from app.data.market_symbols_seed import (
     get_hot_symbols as seed_get_hot_symbols,
     search_symbols as seed_search_symbols,
@@ -26,10 +27,8 @@ market_bp = Blueprint('market', __name__)
 kline_service = KlineService()
 cache = CacheManager()
 
-# 线程池用于并行获取价格
+# Thread pool for parallel price fetching
 executor = ThreadPoolExecutor(max_workers=10)
-
-DEFAULT_USER_ID = 1
 
 def _now_ts() -> int:
     return int(time.time())
@@ -125,7 +124,7 @@ def get_market_types():
     return jsonify({'code': 1, 'msg': 'success', 'data': data})
 
 
-@market_bp.route('/menuFooterConfig', methods=['POST'])
+@market_bp.route('/menuFooterConfig', methods=['GET'])
 def get_menu_footer_config():
     """
     Compatibility stub for old PHP `getMenuFooterConfig`.
@@ -150,17 +149,16 @@ def get_menu_footer_config():
     }
     return jsonify({'code': 1, 'msg': 'success', 'data': data})
 
-@market_bp.route('/symbols/search', methods=['POST'])
+@market_bp.route('/symbols/search', methods=['GET'])
 def search_symbols():
     """
     Lightweight symbol search.
     In local-only mode we keep this simple; frontend allows manual input when no results.
     """
     try:
-        data = request.get_json() or {}
-        market = (data.get('market') or '').strip()
-        keyword = (data.get('keyword') or '').strip().upper()
-        limit = int(data.get('limit') or 20)
+        market = (request.args.get('market') or '').strip()
+        keyword = (request.args.get('keyword') or '').strip().upper()
+        limit = int(request.args.get('limit') or 20)
 
         if not market or not keyword:
             return jsonify({'code': 1, 'msg': 'success', 'data': []})
@@ -172,29 +170,30 @@ def search_symbols():
         logger.error(traceback.format_exc())
         return jsonify({'code': 0, 'msg': str(e), 'data': []}), 500
 
-@market_bp.route('/symbols/hot', methods=['POST'])
+@market_bp.route('/symbols/hot', methods=['GET'])
 def get_hot_symbols():
     """Return a small curated hot list per market (local-only)."""
     try:
-        data = request.get_json() or {}
-        market = (data.get('market') or '').strip()
-        limit = int(data.get('limit') or 10)
+        market = (request.args.get('market') or '').strip()
+        limit = int(request.args.get('limit') or 10)
         hot = seed_get_hot_symbols(market=market, limit=limit)
         return jsonify({'code': 1, 'msg': 'success', 'data': hot})
     except Exception as e:
         logger.error(f"get_hot_symbols failed: {str(e)}")
         return jsonify({'code': 0, 'msg': str(e), 'data': []}), 500
 
-@market_bp.route('/watchlist/get', methods=['POST'])
+@market_bp.route('/watchlist/get', methods=['GET'])
+@login_required
 def get_watchlist():
-    """Get local watchlist for the single user."""
+    """Get watchlist for the current user."""
     try:
+        user_id = g.user_id
         _ensure_watchlist_table()
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
                 "SELECT id, market, symbol, name FROM qd_watchlist WHERE user_id = ? ORDER BY id DESC",
-                (DEFAULT_USER_ID,)
+                (user_id,)
             )
             rows = cur.fetchall() or []
 
@@ -213,8 +212,8 @@ def get_watchlist():
                     if resolved and resolved != current_name:
                         row['name'] = resolved
                         cur.execute(
-                            "UPDATE qd_watchlist SET name = ?, updated_at = ? WHERE user_id = ? AND market = ? AND symbol = ?",
-                            (resolved, _now_ts(), DEFAULT_USER_ID, market, symbol)
+                            "UPDATE qd_watchlist SET name = ?, updated_at = NOW() WHERE user_id = ? AND market = ? AND symbol = ?",
+                            (resolved, user_id, market, symbol)
                         )
                 except Exception:
                     continue
@@ -227,9 +226,11 @@ def get_watchlist():
         return jsonify({'code': 0, 'msg': str(e), 'data': []}), 500
 
 @market_bp.route('/watchlist/add', methods=['POST'])
+@login_required
 def add_watchlist():
-    """Add a symbol to local watchlist (no credits/fees in local mode)."""
+    """Add a symbol to watchlist for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         market = (data.get('market') or '').strip()
         symbol = _normalize_symbol(data.get('symbol'))
@@ -241,18 +242,18 @@ def add_watchlist():
         resolved = resolve_symbol_name(market, symbol) or seed_get_symbol_name(market, symbol)
         name = name_in or resolved or symbol
 
-        now = _now_ts()
         with get_db_connection() as db:
             cur = db.cursor()
-            # Insert or ignore duplicates.
+            # Insert or update (PostgreSQL UPSERT)
             cur.execute(
-                "INSERT OR IGNORE INTO qd_watchlist (user_id, market, symbol, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (DEFAULT_USER_ID, market, symbol, name, now, now)
-            )
-            # If already exists, keep it fresh and sync name.
-            cur.execute(
-                "UPDATE qd_watchlist SET name = ?, updated_at = ? WHERE user_id = ? AND market = ? AND symbol = ?",
-                (name, now, DEFAULT_USER_ID, market, symbol)
+                """
+                INSERT INTO qd_watchlist (user_id, market, symbol, name, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, NOW(), NOW())
+                ON CONFLICT(user_id, market, symbol) DO UPDATE SET
+                    name = excluded.name,
+                    updated_at = NOW()
+                """,
+                (user_id, market, symbol, name)
             )
             db.commit()
             cur.close()
@@ -264,9 +265,11 @@ def add_watchlist():
         return jsonify({'code': 0, 'msg': str(e), 'data': None}), 500
 
 @market_bp.route('/watchlist/remove', methods=['POST'])
+@login_required
 def remove_watchlist():
-    """Remove a symbol from watchlist. Frontend only passes symbol, so we delete across markets."""
+    """Remove a symbol from watchlist for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
         symbol = _normalize_symbol(data.get('symbol'))
         if not symbol:
@@ -276,7 +279,7 @@ def remove_watchlist():
             cur = db.cursor()
             cur.execute(
                 "DELETE FROM qd_watchlist WHERE user_id = ? AND symbol = ?",
-                (DEFAULT_USER_ID, symbol)
+                (user_id, symbol)
             )
             db.commit()
             cur.close()
@@ -290,51 +293,17 @@ def remove_watchlist():
 def get_single_price(market: str, symbol: str) -> dict:
     """获取单个标的的价格数据"""
     try:
-        # 先尝试从缓存获取（60秒缓存）
-        cache_key = f"watchlist_price:{market}:{symbol}"
-        cached_data = cache.get(cache_key)
+        # 使用 get_realtime_price 获取实时价格（内部已有30秒缓存）
+        # 相比原先的 '1D' K线逻辑，这能更及时地反映 Crypto 等 24h 市场的变化
+        price_data = kline_service.get_realtime_price(market, symbol)
         
-        if cached_data:
-            logger.debug(f"Cache hit: {market}:{symbol}")
-            return {
-                'market': market,
-                'symbol': symbol,
-                'price': cached_data.get('price', 0),
-                'change': cached_data.get('change', 0),
-                'changePercent': cached_data.get('changePercent', 0)
-            }
-        
-        # 获取最新的一根K线
-        klines = kline_service.get_kline(market, symbol, '1D', 2)
-        
-        if klines and len(klines) > 0:
-            latest = klines[-1]
-            prev_close = klines[-2]['close'] if len(klines) > 1 else latest.get('open', 0)
-            current_price = latest.get('close', 0)
-            
-            change = round(current_price - prev_close, 4) if prev_close else 0
-            change_percent = round(change / prev_close * 100, 2) if prev_close and prev_close > 0 else 0
-            
-            result = {
-                'market': market,
-                'symbol': symbol,
-                'price': current_price,
-                'change': change,
-                'changePercent': change_percent
-            }
-            
-            # 缓存60秒
-            cache.set(cache_key, result, 60)
-            
-            return result
-        else:
-            return {
-                'market': market,
-                'symbol': symbol,
-                'price': 0,
-                'change': 0,
-                'changePercent': 0
-            }
+        return {
+            'market': market,
+            'symbol': symbol,
+            'price': price_data.get('price', 0),
+            'change': price_data.get('change', 0),
+            'changePercent': price_data.get('changePercent', 0)
+        }
     except Exception as e:
         logger.error(f"Failed to fetch price {market}:{symbol} - {str(e)}")
         return {
@@ -346,45 +315,26 @@ def get_single_price(market: str, symbol: str) -> dict:
         }
 
 
-@market_bp.route('/watchlist/prices', methods=['POST'])
+@market_bp.route('/watchlist/prices', methods=['GET'])
 def get_watchlist_prices():
     """
     批量获取自选股价格
     
-    请求体:
-    {
-        "watchlist": [
-            {"market": "USStock", "symbol": "AAPL"},
-            {"market": "Crypto", "symbol": "BTC"},
-            ...
-        ]
-    }
-    
-    响应:
-    {
-        "code": 1,
-        "msg": "success",
-        "data": [
-            {"market": "USStock", "symbol": "AAPL", "price": 150.0, "change": 1.5, "changePercent": 1.0},
-            {"market": "Crypto", "symbol": "BTC", "price": 95000.0, "change": 1000, "changePercent": 1.05}
-        ]
-    }
+    Params (Query String):
+        watchlist: JSON string of list of {market, symbol} objects
+        e.g. ?watchlist=[{"market":"USStock","symbol":"AAPL"}]
     """
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'code': 0,
-                'msg': 'Request body is required',
-                'data': []
-            }), 400
-        
-        watchlist = data.get('watchlist', [])
+        watchlist_str = request.args.get('watchlist', '[]')
+        try:
+            watchlist = json.loads(watchlist_str)
+        except Exception:
+            watchlist = []
         
         if not watchlist or not isinstance(watchlist, list):
             return jsonify({
                 'code': 0,
-                'msg': 'Invalid watchlist format',
+                'msg': 'Invalid watchlist format (expected JSON list in query param)',
                 'data': []
             }), 400
         

@@ -1585,13 +1585,21 @@ export default {
     async runMonitorNow (id) {
       this.runningMonitor = id
       try {
-        // 传递当前语言给后端
+        // 传递当前语言给后端，使用异步模式
         const currentLang = this.$store.getters.lang || 'en-US'
-        const res = await runMonitor(id, { language: currentLang })
+        const res = await runMonitor(id, { language: currentLang, async: true })
         if (res && res.code === 1) {
-          if (res.data?.success) {
+          // 异步模式：后端立即返回，在后台执行
+          if (res.data?.status === 'running') {
+            this.$message.success(this.$t('portfolio.message.monitorRunning'))
+            this.$notification.info({
+              message: this.$t('portfolio.monitors.runningTitle'),
+              description: this.$t('portfolio.monitors.runningDesc'),
+              duration: 5
+            })
+          } else if (res.data?.success) {
+            // 同步模式返回结果（兼容旧逻辑）
             this.$message.success(this.$t('portfolio.message.monitorRunSuccess'))
-            // Show analysis result in a modal or notification
             if (res.data.analysis) {
               this.$notification.open({
                 message: this.$t('portfolio.monitors.analysisResult'),
@@ -1599,13 +1607,22 @@ export default {
                 duration: 0
               })
             }
-          } else {
-            this.$message.error(res.data?.error || this.$t('portfolio.message.monitorRunFailed'))
+          } else if (res.data?.error) {
+            this.$message.error(res.data.error || this.$t('portfolio.message.monitorRunFailed'))
           }
           this.loadMonitors()
         }
       } catch (e) {
-        this.$message.error(this.$t('portfolio.message.monitorRunFailed'))
+        // Handle timeout gracefully - analysis may still be running in background
+        if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+          this.$notification.warning({
+            message: this.$t('portfolio.monitors.timeoutTitle'),
+            description: this.$t('portfolio.monitors.timeoutDesc'),
+            duration: 8
+          })
+        } else {
+          this.$message.error(this.$t('portfolio.message.monitorRunFailed'))
+        }
       } finally {
         this.runningMonitor = null
       }

@@ -14,6 +14,19 @@ from typing import Any, Dict, Optional, Tuple
 from app.utils.db import get_db_connection
 
 
+def _get_user_id_from_strategy(strategy_id: int) -> int:
+    """Get user_id from strategy table. Defaults to 1 if not found."""
+    try:
+        with get_db_connection() as db:
+            cur = db.cursor()
+            cur.execute("SELECT user_id FROM qd_strategies_trading WHERE id = %s", (strategy_id,))
+            row = cur.fetchone()
+            cur.close()
+        return int((row or {}).get('user_id') or 1)
+    except Exception:
+        return 1
+
+
 def record_trade(
     *,
     strategy_id: int,
@@ -24,19 +37,22 @@ def record_trade(
     commission: float = 0.0,
     commission_ccy: str = "",
     profit: Optional[float] = None,
+    user_id: int = None,
 ) -> None:
-    now = int(time.time())
     value = float(amount or 0.0) * float(price or 0.0)
+    if user_id is None:
+        user_id = _get_user_id_from_strategy(strategy_id)
     with get_db_connection() as db:
         cur = db.cursor()
         cur.execute(
             """
             INSERT INTO qd_strategy_trades
-            (strategy_id, symbol, type, price, amount, value, commission, commission_ccy, profit, created_at)
+            (user_id, strategy_id, symbol, type, price, amount, value, commission, commission_ccy, profit, created_at)
             VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             """,
             (
+                int(user_id),
                 int(strategy_id),
                 str(symbol),
                 str(trade_type),
@@ -46,7 +62,6 @@ def record_trade(
                 float(commission or 0.0),
                 str(commission_ccy or ""),
                 profit,
-                now,
             ),
         )
         db.commit()
@@ -86,25 +101,27 @@ def upsert_position(
     current_price: float,
     highest_price: float = 0.0,
     lowest_price: float = 0.0,
+    user_id: int = None,
 ) -> None:
-    now = int(time.time())
+    if user_id is None:
+        user_id = _get_user_id_from_strategy(strategy_id)
     with get_db_connection() as db:
         cur = db.cursor()
         cur.execute(
             """
             INSERT INTO qd_strategy_positions
-            (strategy_id, symbol, side, size, entry_price, current_price, highest_price, lowest_price, updated_at)
+            (user_id, strategy_id, symbol, side, size, entry_price, current_price, highest_price, lowest_price, updated_at)
             VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT(strategy_id, symbol, side) DO UPDATE SET
                 size = excluded.size,
                 entry_price = excluded.entry_price,
                 current_price = excluded.current_price,
-                highest_price = CASE WHEN excluded.highest_price > 0 THEN excluded.highest_price ELSE highest_price END,
-                lowest_price = CASE WHEN excluded.lowest_price > 0 THEN excluded.lowest_price ELSE lowest_price END,
-                updated_at = excluded.updated_at
+                highest_price = CASE WHEN excluded.highest_price > 0 THEN excluded.highest_price ELSE qd_strategy_positions.highest_price END,
+                lowest_price = CASE WHEN excluded.lowest_price > 0 THEN excluded.lowest_price ELSE qd_strategy_positions.lowest_price END,
+                updated_at = NOW()
             """,
-            (int(strategy_id), str(symbol), str(side), float(size or 0.0), float(entry_price or 0.0), float(current_price or 0.0), float(highest_price or 0.0), float(lowest_price or 0.0), now),
+            (int(user_id), int(strategy_id), str(symbol), str(side), float(size or 0.0), float(entry_price or 0.0), float(current_price or 0.0), float(highest_price or 0.0), float(lowest_price or 0.0)),
         )
         db.commit()
         cur.close()

@@ -14,7 +14,7 @@ kline_bp = Blueprint('kline', __name__)
 kline_service = KlineService()
 
 
-@kline_bp.route('/kline', methods=['GET', 'POST'])
+@kline_bp.route('/kline', methods=['GET'])
 def get_kline():
     """
     获取K线数据
@@ -27,17 +27,12 @@ def get_kline():
         before_time: 获取此时间之前的数据 (可选，Unix时间戳)
     """
     try:
-        # 支持 GET 和 POST
-        if request.method == 'POST':
-            data = request.get_json() or {}
-        else:
-            data = request.args
-        
-        market = data.get('market', 'USStock')
-        symbol = data.get('symbol', '')
-        timeframe = data.get('timeframe', '1D')
-        limit = int(data.get('limit', 300))
-        before_time = data.get('before_time') or data.get('beforeTime')
+        # 强制 GET, 使用 request.args
+        market = request.args.get('market', 'USStock')
+        symbol = request.args.get('symbol', '')
+        timeframe = request.args.get('timeframe', '1D')
+        limit = int(request.args.get('limit', 300))
+        before_time = request.args.get('before_time') or request.args.get('beforeTime')
         
         if before_time:
             before_time = int(before_time)

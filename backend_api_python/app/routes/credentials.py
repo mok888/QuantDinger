@@ -9,16 +9,15 @@ Local deployment notes:
 import time
 import traceback
 import json
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 from app.utils.db import get_db_connection
 from app.utils.logger import get_logger
+from app.utils.auth import login_required
 
 logger = get_logger(__name__)
 
 credentials_bp = Blueprint('credentials', __name__)
-
-DEFAULT_USER_ID = 1
 
 
 def _api_key_hint(api_key: str) -> str:
@@ -31,9 +30,11 @@ def _api_key_hint(api_key: str) -> str:
 
 
 @credentials_bp.route('/list', methods=['GET'])
+@login_required
 def list_credentials():
+    """List all credentials for the current user."""
     try:
-        user_id = request.args.get('user_id', type=int) or DEFAULT_USER_ID
+        user_id = g.user_id
 
         with get_db_connection() as db:
             cur = db.cursor()
@@ -57,10 +58,12 @@ def list_credentials():
 
 
 @credentials_bp.route('/create', methods=['POST'])
+@login_required
 def create_credential():
+    """Create a new credential for the current user."""
     try:
+        user_id = g.user_id
         data = request.get_json() or {}
-        user_id = int(data.get('user_id') or DEFAULT_USER_ID)
         name = (data.get('name') or '').strip()
         exchange_id = (data.get('exchange_id') or '').strip()
         api_key = (data.get('api_key') or '').strip()
@@ -78,16 +81,15 @@ def create_credential():
             'secret_key': secret_key,
             'passphrase': passphrase
         }, ensure_ascii=False)
-        now = int(time.time())
 
         with get_db_connection() as db:
             cur = db.cursor()
             cur.execute(
                 """
                 INSERT INTO qd_exchange_credentials (user_id, name, exchange_id, api_key_hint, encrypted_config, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, NOW(), NOW())
                 """,
-                (user_id, name, exchange_id, _api_key_hint(api_key), plaintext_config, now, now)
+                (user_id, name, exchange_id, _api_key_hint(api_key), plaintext_config)
             )
             new_id = cur.lastrowid
             db.commit()
@@ -101,10 +103,12 @@ def create_credential():
 
 
 @credentials_bp.route('/delete', methods=['DELETE'])
+@login_required
 def delete_credential():
+    """Delete a credential for the current user."""
     try:
+        user_id = g.user_id
         cred_id = request.args.get('id', type=int)
-        user_id = request.args.get('user_id', type=int) or DEFAULT_USER_ID
         if not cred_id:
             return jsonify({'code': 0, 'msg': 'Missing id', 'data': None}), 400
 
@@ -125,14 +129,14 @@ def delete_credential():
 
 
 @credentials_bp.route('/get', methods=['GET'])
+@login_required
 def get_credential():
     """
     Return decrypted credential for form auto-fill.
-    NOTE: In a production system, this must be protected by strong authentication/authorization.
     """
     try:
+        user_id = g.user_id
         cred_id = request.args.get('id', type=int)
-        user_id = request.args.get('user_id', type=int) or DEFAULT_USER_ID
         if not cred_id:
             return jsonify({'code': 0, 'msg': 'Missing id', 'data': None}), 400
 

@@ -162,8 +162,7 @@ export default {
       // end
       isDev: process.env.NODE_ENV === 'development' || process.env.VUE_APP_PREVIEW === 'true',
 
-      // base
-      menus: [],
+      // base - menus moved to computed property
       // 侧栏收起状态
       collapsed: false,
       title: defaultSettings.title,
@@ -200,23 +199,23 @@ export default {
       // Static footer config (local OSS build)
       menuFooterConfig: {
         contact: {
-          support_url: 'https://t.me/worldinbroker',
+          support_url: 'https://t.me/quantdinger',
           feature_request_url: 'https://github.com/brokermr810/QuantDinger/issues',
           email: 'brokermr810@gmail.com',
-          live_chat_url: 'https://t.me/worldinbroker'
+          live_chat_url: 'https://t.me/quantdinger'
         },
         social_accounts: [
           { name: 'GitHub', icon: 'github', url: 'https://github.com/brokermr810/QuantDinger' },
           { name: 'X', icon: 'x', url: 'https://x.com/HenryCryption' },
           { name: 'Discord', icon: 'discord', url: 'https://discord.gg/cn6HVE2KC' },
-          { name: 'Telegram', icon: 'telegram', url: 'https://t.me/worldinbroker' },
+          { name: 'Telegram', icon: 'telegram', url: 'https://t.me/quantdinger' },
           { name: 'YouTube', icon: 'youtube', url: 'https://youtube.com/@quantdinger' }
         ],
         legal: {
           user_agreement: '',
           privacy_policy: ''
         },
-        copyright: '© 2025-2026 QuantDinger'
+        copyright: '© 2025-2026 QuantDinger. All rights reserved.'
       },
       // 是否是首次初始化主题色（用于决定是否显示"正在切换主题"提示）
       isInitialThemeColorLoad: true
@@ -226,11 +225,15 @@ export default {
     ...mapState({
       // 动态主路由
       mainMenu: state => state.permission.addRouters
-    })
+    }),
+    // 响应式菜单 - 根据 addRouters 动态更新
+    menus () {
+      const routes = this.mainMenu.find(item => item.path === '/')
+      return (routes && routes.children) || []
+    }
   },
   created () {
-    const routes = this.mainMenu.find(item => item.path === '/')
-    this.menus = (routes && routes.children) || []
+    // menus is now a computed property - no need to set here
     // 从 store 同步主题设置（从 localStorage 恢复）
     this.settings.theme = this.$store.state.app.theme
     this.settings.primaryColor = this.$store.state.app.color || defaultSettings.primaryColor

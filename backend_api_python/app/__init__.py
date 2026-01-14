@@ -180,6 +180,85 @@ def create_app(config_name='default'):
     
     setup_logger()
     
+    # Initialize database and ensure admin user exists
+    try:
+        from app.utils.db import init_database, get_db_type
+        logger.info(f"Database type: {get_db_type()}")
+        init_database()
+        
+        # Ensure admin user exists (multi-user mode)
+        from app.services.user_service import get_user_service
+        get_user_service().ensure_admin_exists()
+    except Exception as e:
+        logger.warning(f"Database initialization note: {e}")
+
+    # =====================================================
+    # Demo Mode Middleware (Read-Only Mode)
+    # =====================================================
+    import os
+    from flask import request, jsonify
+
+    # Check environment variable IS_DEMO_MODE
+    is_demo_mode = os.getenv('IS_DEMO_MODE', 'false').lower() == 'true'
+
+    if is_demo_mode:
+        logger.info("!!! SYSTEM STARTING IN DEMO MODE (READ-ONLY) !!!")
+
+        @app.before_request
+        def global_demo_mode_check():
+            """
+            Global interceptor for demo mode.
+            Blocks all state-changing methods AND access to sensitive GET endpoints.
+            """
+            path = request.path
+
+            # 1. Block access to sensitive settings/config APIs (even if GET)
+            # These endpoints reveal internal config or allow settings changes
+            sensitive_endpoints = [
+                '/api/settings',           # All settings routes
+                '/api/credentials',        # Credentials management
+                '/api/market/watchlist/add', # Modifying watchlist (POST, already blocked but good to be explicit)
+                '/api/market/watchlist/remove'
+            ]
+            
+            # Check if path starts with any sensitive prefix
+            if any(path.startswith(endpoint) for endpoint in sensitive_endpoints):
+                 return jsonify({
+                    'code': 403,
+                    'msg': 'Demo mode: Access to settings and credentials is forbidden.',
+                    'data': None
+                }), 403
+
+            # 2. Allow safe methods (GET, HEAD, OPTIONS)
+            if request.method in ['GET', 'HEAD', 'OPTIONS']:
+                return None
+            
+            # 2. Allow Authentication (Login/Logout)
+            # The auth routes are mounted at /api/user (see app/routes/__init__.py)
+            if request.path.endswith('/login') or request.path.endswith('/logout'):
+                return None
+
+            # 3. Allow specific read-only POST endpoints (Whitelist)
+            # Some search/query endpoints use POST for complex payloads but don't modify state.
+            whitelist_post_endpoints = [
+                '/api/indicator/getIndicators', # Search indicators
+                '/api/market/klines',           # Fetch K-lines (sometimes POST)
+                '/api/ai/chat',                 # AI Chat (generates response, doesn't mutate system state)
+                '/api/analysis/indicator',      # Analysis request
+                '/api/analysis/ai_analysis'     # AI Analysis request
+            ]
+            
+            # Check if current path ends with any whitelist item
+            if any(request.path.endswith(endpoint) for endpoint in whitelist_post_endpoints):
+                return None
+
+            # 4. Block everything else
+            return jsonify({
+                'code': 403,
+                'msg': 'Demo mode: Read-only access. Forbidden to modify data.',
+                'data': None
+            }), 403
+    
     from app.routes import register_routes
     register_routes(app)
     

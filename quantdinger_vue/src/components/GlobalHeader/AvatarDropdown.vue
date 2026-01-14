@@ -6,6 +6,11 @@
     </span>
     <template v-slot:overlay>
       <a-menu class="ant-pro-drop-down menu" :selected-keys="[]">
+        <a-menu-item key="profile" @click="handleProfile">
+          <a-icon type="user" />
+          {{ $t('menu.profile') || 'My Profile' }}
+        </a-menu-item>
+        <a-menu-divider />
         <a-menu-item key="logout" @click="handleLogout">
           <a-icon type="logout" />
           {{ $t('menu.account.logout') }}
@@ -34,6 +39,9 @@ export default {
     }
   },
   methods: {
+    handleProfile () {
+      this.$router.push({ name: 'Profile' })
+    },
     handleLogout (e) {
       Modal.confirm({
         title: this.$t('layouts.usermenu.dialog.title'),

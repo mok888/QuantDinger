@@ -447,18 +447,31 @@ class SignalNotifier:
         title: str,
         message: str,
         payload: Dict[str, Any],
+        user_id: int = None,
     ) -> Tuple[bool, str]:
         try:
             now = int(time.time())
+            # Get user_id from strategy if not provided
+            if user_id is None:
+                try:
+                    with get_db_connection() as db:
+                        cur = db.cursor()
+                        cur.execute("SELECT user_id FROM qd_strategies_trading WHERE id = ?", (strategy_id,))
+                        row = cur.fetchone()
+                        cur.close()
+                    user_id = int((row or {}).get('user_id') or 1)
+                except Exception:
+                    user_id = 1
             with get_db_connection() as db:
                 cur = db.cursor()
                 cur.execute(
                     """
                     INSERT INTO qd_strategy_notifications
-                    (strategy_id, symbol, signal_type, channels, title, message, payload_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (user_id, strategy_id, symbol, signal_type, channels, title, message, payload_json, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     """,
                     (
+                        int(user_id),
                         int(strategy_id),
                         str(symbol or ""),
                         str(signal_type or ""),
@@ -466,7 +479,6 @@ class SignalNotifier:
                         str(title or ""),
                         str(message or ""),
                         json.dumps(payload or {}, ensure_ascii=False),
-                        int(now),
                     ),
                 )
                 db.commit()

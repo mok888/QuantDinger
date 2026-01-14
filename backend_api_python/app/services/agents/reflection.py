@@ -1,220 +1,249 @@
 """
-自动反思与验证服务
-用于记录分析预测，并在未来自动验证结果，实现闭环学习
+Auto-reflection and verification service (PostgreSQL).
+
+Records analysis predictions and auto-verifies results in the future
+to achieve closed-loop learning for AI agents.
 """
-import sqlite3
+
 import os
-import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+
 from app.utils.logger import get_logger
+from app.utils.db import get_db_connection
 from .memory import AgentMemory
 from .tools import AgentTools
 
 logger = get_logger(__name__)
 
+
 class ReflectionService:
-    """反思服务：管理分析记录的存储和验证"""
+    """Reflection service: manages storage and verification of analysis records."""
     
     def __init__(self, db_path: Optional[str] = None):
-        if db_path is None:
-            # 默认数据库路径
-            db_dir = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'memory')
-            os.makedirs(db_dir, exist_ok=True)
-            db_path = os.path.join(db_dir, 'reflection_records.db')
-        
-        self.db_path = db_path
-        self.tools = AgentTools()
-        self._init_database()
-        
-    def _init_database(self):
-        """初始化数据库表"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 创建分析记录表
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS analysis_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    market TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    initial_price REAL,
-                    decision TEXT,
-                    confidence INTEGER,
-                    reasoning TEXT,
-                    analysis_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    target_check_date TIMESTAMP,
-                    status TEXT DEFAULT 'PENDING',  -- PENDING, COMPLETED, FAILED
-                    final_price REAL,
-                    actual_return REAL,
-                    check_result TEXT
-                )
-            ''')
-            
-            # 创建索引
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_status_date ON analysis_records(status, target_check_date)
-            ''')
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"初始化反思数据库失败: {e}")
-
-    def record_analysis(self, market: str, symbol: str, price: float, 
-                       decision: str, confidence: int, reasoning: str,
-                       check_days: int = 7):
         """
-        记录一次分析，以便未来验证
+        Initialize reflection service.
         
         Args:
-            market: 市场
-            symbol: 代码
-            price: 当前价格
-            decision: 决策 (BUY/SELL/HOLD)
-            confidence: 置信度
-            reasoning: 理由
-            check_days: 几天后验证 (默认7天)
+            db_path: Deprecated parameter, kept for backward compatibility
+        """
+        self.tools = AgentTools()
+
+    def record_analysis(
+        self,
+        market: str,
+        symbol: str,
+        price: float,
+        decision: str,
+        confidence: int,
+        reasoning: str,
+        check_days: int = 7
+    ):
+        """
+        Record an analysis for future verification.
+        
+        Args:
+            market: Market type
+            symbol: Symbol code
+            price: Current price
+            decision: Decision (BUY/SELL/HOLD)
+            confidence: Confidence level (0-100)
+            reasoning: Reasoning text
+            check_days: Days until verification (default 7)
         """
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
             target_date = datetime.now() + timedelta(days=check_days)
             
-            cursor.execute('''
-                INSERT INTO analysis_records 
-                (market, symbol, initial_price, decision, confidence, reasoning, target_check_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (market, symbol, price, decision, confidence, reasoning, target_date))
-            
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO qd_reflection_records 
+                    (market, symbol, initial_price, decision, confidence, reasoning, target_check_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (market, symbol, price, decision, confidence, reasoning, target_date)
+                )
+                conn.commit()
+                cur.close()
             logger.info(f"Recorded analysis for reflection: {market}:{symbol}, will verify after {check_days} day(s)")
         except Exception as e:
-            logger.error(f"记录分析失败: {e}")
+            logger.error(f"Failed to record analysis: {e}")
 
     def run_verification_cycle(self):
         """
-        执行验证周期：检查到期的记录，验证结果，并写入记忆
+        Execute verification cycle: check due records, verify results, and write to memory.
         """
-        logger.info("开始执行自动反思验证周期...")
+        logger.info("Starting auto-reflection verification cycle...")
         
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 1. 查找所有已到期且未处理的记录
-            cursor.execute('''
-                SELECT id, market, symbol, initial_price, decision, confidence, reasoning, analysis_date 
-                FROM analysis_records 
-                WHERE status = 'PENDING' AND target_check_date <= CURRENT_TIMESTAMP
-            ''')
-            
-            records = cursor.fetchall()
-            
-            if not records:
-                logger.info("没有需要验证的记录")
-                conn.close()
-                return
-            
-            logger.info(f"发现 {len(records)} 条待验证记录")
-            
-            # 初始化记忆系统（用于写入验证结果）
-            trader_memory = AgentMemory('trader_agent')
-            
-            for record in records:
-                record_id, market, symbol, initial_price, decision, confidence, reasoning, analysis_date = record
+            with get_db_connection() as conn:
+                cur = conn.cursor()
                 
-                try:
-                    # 2. 获取当前最新价格
-                    current_price_data = self.tools.get_current_price(market, symbol)
-                    current_price = current_price_data.get('price')
+                # 1. Find all due and pending records
+                cur.execute(
+                    """
+                    SELECT id, market, symbol, initial_price, decision, confidence, reasoning, analysis_date 
+                    FROM qd_reflection_records 
+                    WHERE status = 'PENDING' AND target_check_date <= NOW()
+                    """
+                )
+                records = cur.fetchall() or []
+                
+                if not records:
+                    logger.info("No records to verify")
+                    cur.close()
+                    return
+                
+                logger.info(f"Found {len(records)} records to verify")
+                
+                # Initialize memory system for writing verification results
+                trader_memory = AgentMemory('trader_agent')
+                
+                for record in records:
+                    record_id = record['id']
+                    market = record['market']
+                    symbol = record['symbol']
+                    initial_price = record['initial_price']
+                    decision = record['decision']
+                    confidence = record['confidence']
+                    reasoning = record['reasoning']
+                    analysis_date = record['analysis_date']
                     
-                    if not current_price:
-                        logger.warning(f"无法获取 {market}:{symbol} 的当前价格，跳过")
-                        continue
+                    try:
+                        # 2. Get current price
+                        current_price_data = self.tools.get_current_price(market, symbol)
+                        current_price = current_price_data.get('price')
                         
-                    # 3. 计算收益和结果
-                    if not initial_price or initial_price == 0:
-                        actual_return = 0.0
-                    else:
-                        actual_return = (current_price - initial_price) / initial_price * 100
-                    
-                    # 评估结果
-                    result_desc = ""
-                    is_good_prediction = False
-                    
-                    if decision == "BUY":
-                        if actual_return > 2.0:
-                            result_desc = "Correct: price rose after BUY"
-                            is_good_prediction = True
-                        elif actual_return < -2.0:
-                            result_desc = "Wrong: price fell after BUY"
+                        if not current_price:
+                            logger.warning(f"Cannot get current price for {market}:{symbol}, skipping")
+                            continue
+                        
+                        # 3. Calculate return and result
+                        if not initial_price or initial_price == 0:
+                            actual_return = 0.0
                         else:
-                            result_desc = "Neutral: limited price movement"
-                    elif decision == "SELL":
-                        if actual_return < -2.0:
-                            result_desc = "Correct: price fell after SELL"
-                            is_good_prediction = True
-                        elif actual_return > 2.0:
-                            result_desc = "Wrong: price rose after SELL"
-                        else:
-                            result_desc = "Neutral: limited price movement"
-                    else: # HOLD
-                        if -2.0 <= actual_return <= 2.0:
-                            result_desc = "Correct: limited movement during HOLD"
-                            is_good_prediction = True
-                        else:
-                            result_desc = f"Deviated: large movement during HOLD ({actual_return:.2f}%)"
+                            actual_return = (current_price - initial_price) / initial_price * 100
+                        
+                        # Evaluate result
+                        result_desc = ""
+                        is_good_prediction = False
+                        
+                        if decision == "BUY":
+                            if actual_return > 2.0:
+                                result_desc = "Correct: price rose after BUY"
+                                is_good_prediction = True
+                            elif actual_return < -2.0:
+                                result_desc = "Wrong: price fell after BUY"
+                            else:
+                                result_desc = "Neutral: limited price movement"
+                        elif decision == "SELL":
+                            if actual_return < -2.0:
+                                result_desc = "Correct: price fell after SELL"
+                                is_good_prediction = True
+                            elif actual_return > 2.0:
+                                result_desc = "Wrong: price rose after SELL"
+                            else:
+                                result_desc = "Neutral: limited price movement"
+                        else:  # HOLD
+                            if -2.0 <= actual_return <= 2.0:
+                                result_desc = "Correct: limited movement during HOLD"
+                                is_good_prediction = True
+                            else:
+                                result_desc = f"Deviated: large movement during HOLD ({actual_return:.2f}%)"
 
-                    # 4. 写入记忆系统 (Let the agent learn)
-                    memory_situation = f"{market}:{symbol} auto-verified (analysis_date: {analysis_date})"
-                    memory_recommendation = f"Decision: {decision} (confidence {confidence}), reasoning: {(reasoning or '')[:120]}"
-                    memory_result = f"Verification: {result_desc}; return={actual_return:.2f}% (initial {initial_price} -> final {current_price})"
-                    
-                    trader_memory.add_memory(
-                        memory_situation,
-                        memory_recommendation,
-                        memory_result,
-                        actual_return,
-                        metadata={
-                            "market": market,
-                            "symbol": symbol,
-                            "timeframe": "1D",
-                            "features": {
-                                "source": "auto_verify",
-                                "decision": decision,
-                                "confidence": confidence,
-                                "initial_price": initial_price,
-                                "final_price": current_price,
-                                "analysis_date": str(analysis_date),
-                                "result_desc": result_desc,
-                                "is_good_prediction": bool(is_good_prediction),
-                            },
-                        }
-                    )
-                    
-                    # 5. 更新记录状态
-                    cursor.execute('''
-                        UPDATE analysis_records 
-                        SET status = 'COMPLETED', final_price = ?, actual_return = ?, check_result = ?
-                        WHERE id = ?
-                    ''', (current_price, actual_return, result_desc, record_id))
-                    
-                    conn.commit()
-                    logger.info(f"验证完成 {market}:{symbol}: {result_desc}")
-                    
-                except Exception as inner_e:
-                    logger.error(f"处理记录 {record_id} 失败: {inner_e}")
-                    # 标记为失败，避免重复处理
-                    # cursor.execute("UPDATE analysis_records SET status = 'FAILED' WHERE id = ?", (record_id,))
-                    # conn.commit()
-            
-            conn.close()
-            logger.info("反思验证周期结束")
+                        # 4. Write to memory system (agent learning)
+                        memory_situation = f"{market}:{symbol} auto-verified (analysis_date: {analysis_date})"
+                        memory_recommendation = f"Decision: {decision} (confidence {confidence}), reasoning: {(reasoning or '')[:120]}"
+                        memory_result = f"Verification: {result_desc}; return={actual_return:.2f}% (initial {initial_price} -> final {current_price})"
+                        
+                        trader_memory.add_memory(
+                            memory_situation,
+                            memory_recommendation,
+                            memory_result,
+                            actual_return,
+                            metadata={
+                                "market": market,
+                                "symbol": symbol,
+                                "timeframe": "1D",
+                                "features": {
+                                    "source": "auto_verify",
+                                    "decision": decision,
+                                    "confidence": confidence,
+                                    "initial_price": initial_price,
+                                    "final_price": current_price,
+                                    "analysis_date": str(analysis_date),
+                                    "result_desc": result_desc,
+                                    "is_good_prediction": bool(is_good_prediction),
+                                },
+                            }
+                        )
+                        
+                        # 5. Update record status
+                        cur.execute(
+                            """
+                            UPDATE qd_reflection_records 
+                            SET status = 'COMPLETED', final_price = ?, actual_return = ?, check_result = ?
+                            WHERE id = ?
+                            """,
+                            (current_price, actual_return, result_desc, record_id)
+                        )
+                        conn.commit()
+                        logger.info(f"Verification completed {market}:{symbol}: {result_desc}")
+                        
+                    except Exception as inner_e:
+                        logger.error(f"Failed to process record {record_id}: {inner_e}")
+                        # Optionally mark as failed to avoid repeated processing
+                        # cur.execute("UPDATE qd_reflection_records SET status = 'FAILED' WHERE id = ?", (record_id,))
+                        # conn.commit()
+                
+                cur.close()
+            logger.info("Reflection verification cycle completed")
             
         except Exception as e:
-            logger.error(f"执行验证周期失败: {e}")
+            logger.error(f"Failed to execute verification cycle: {e}")
 
+    def get_pending_count(self) -> int:
+        """Get count of pending verification records."""
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) as cnt FROM qd_reflection_records WHERE status = 'PENDING'")
+                count = cur.fetchone()['cnt']
+                cur.close()
+                return count
+        except Exception as e:
+            logger.error(f"Failed to get pending count: {e}")
+            return 0
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get reflection statistics."""
+        try:
+            with get_db_connection() as conn:
+                cur = conn.cursor()
+                
+                cur.execute("SELECT COUNT(*) as cnt FROM qd_reflection_records")
+                total = cur.fetchone()['cnt']
+                
+                cur.execute("SELECT COUNT(*) as cnt FROM qd_reflection_records WHERE status = 'PENDING'")
+                pending = cur.fetchone()['cnt']
+                
+                cur.execute("SELECT COUNT(*) as cnt FROM qd_reflection_records WHERE status = 'COMPLETED'")
+                completed = cur.fetchone()['cnt']
+                
+                cur.execute(
+                    "SELECT AVG(actual_return) as avg_ret FROM qd_reflection_records WHERE status = 'COMPLETED' AND actual_return IS NOT NULL"
+                )
+                avg_return = cur.fetchone()['avg_ret'] or 0
+                
+                cur.close()
+                
+            return {
+                'total_records': total,
+                'pending_records': pending,
+                'completed_records': completed,
+                'average_return': round(avg_return, 2)
+            }
+        except Exception as e:
+            logger.error(f"Failed to get statistics: {e}")
+            return {}

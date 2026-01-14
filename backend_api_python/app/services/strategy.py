@@ -427,16 +427,21 @@ class StrategyService:
         except Exception:
             return 'IndicatorStrategy'
 
-    def update_strategy_status(self, strategy_id: int, status: str) -> bool:
-        """Update strategy status."""
+    def update_strategy_status(self, strategy_id: int, status: str, user_id: int = None) -> bool:
+        """Update strategy status. If user_id is provided, verify ownership."""
         try:
-            now = int(time.time())
             with get_db_connection() as db:
                 cur = db.cursor()
-                cur.execute(
-                    "UPDATE qd_strategies_trading SET status = ?, updated_at = ? WHERE id = ?",
-                    (status, now, strategy_id)
-                )
+                if user_id is not None:
+                    cur.execute(
+                        "UPDATE qd_strategies_trading SET status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?",
+                        (status, strategy_id, user_id)
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE qd_strategies_trading SET status = ?, updated_at = NOW() WHERE id = ?",
+                        (status, strategy_id)
+                    )
                 db.commit()
                 cur.close()
             return True
@@ -467,7 +472,7 @@ class StrategyService:
         return json.dumps(obj, ensure_ascii=False)
 
     def list_strategies(self, user_id: int = 1) -> List[Dict[str, Any]]:
-        """List strategies for local single-user."""
+        """List strategies for the specified user."""
         try:
             with get_db_connection() as db:
                 cur = db.cursor()
@@ -475,8 +480,10 @@ class StrategyService:
                     """
                     SELECT *
                     FROM qd_strategies_trading
+                    WHERE user_id = ?
                     ORDER BY id DESC
-                    """
+                    """,
+                    (user_id,)
                 )
                 rows = cur.fetchall() or []
                 cur.close()
@@ -501,11 +508,15 @@ class StrategyService:
             logger.error(f"list_strategies failed: {e}")
             return []
 
-    def get_strategy(self, strategy_id: int) -> Optional[Dict[str, Any]]:
+    def get_strategy(self, strategy_id: int, user_id: int = None) -> Optional[Dict[str, Any]]:
+        """Get strategy by ID. If user_id is provided, verify ownership."""
         try:
             with get_db_connection() as db:
                 cur = db.cursor()
-                cur.execute("SELECT * FROM qd_strategies_trading WHERE id = ?", (strategy_id,))
+                if user_id is not None:
+                    cur.execute("SELECT * FROM qd_strategies_trading WHERE id = ? AND user_id = ?", (strategy_id, user_id))
+                else:
+                    cur.execute("SELECT * FROM qd_strategies_trading WHERE id = ?", (strategy_id,))
                 r = cur.fetchone()
                 cur.close()
             if not r:
@@ -521,11 +532,11 @@ class StrategyService:
             return None
 
     def create_strategy(self, payload: Dict[str, Any]) -> int:
-        now = int(time.time())
         name = (payload.get('strategy_name') or '').strip()
         if not name:
             raise ValueError("strategy_name is required")
 
+        user_id = payload.get('user_id') or 1
         strategy_type = payload.get('strategy_type') or 'IndicatorStrategy'
         market_category = payload.get('market_category') or 'Crypto'
         execution_mode = payload.get('execution_mode') or 'signal'
@@ -551,14 +562,15 @@ class StrategyService:
             cur.execute(
                 """
                 INSERT INTO qd_strategies_trading
-                (strategy_name, strategy_type, market_category, execution_mode, notification_config,
+                (user_id, strategy_name, strategy_type, market_category, execution_mode, notification_config,
                  status, symbol, timeframe, initial_capital, leverage, market_type,
                  exchange_config, indicator_config, trading_config, ai_model_config, decide_interval,
                  strategy_group_id, group_base_name,
                  created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 """,
                 (
+                    user_id,
                     name,
                     strategy_type,
                     market_category,
@@ -576,9 +588,7 @@ class StrategyService:
                     self._dump_json_or_encrypt(payload.get('ai_model_config') or {}, encrypt=False),
                     int(payload.get('decide_interval') or 300),
                     strategy_group_id,
-                    group_base_name,
-                    now,
-                    now
+                    group_base_name
                 )
             )
             new_id = cur.lastrowid
@@ -657,14 +667,14 @@ class StrategyService:
             'total_failed': len(failed_symbols)
         }
 
-    def batch_start_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """Batch start strategies"""
+    def batch_start_strategies(self, strategy_ids: List[int], user_id: int = None) -> Dict[str, Any]:
+        """Batch start strategies. If user_id is provided, verify ownership."""
         success_ids = []
         failed_ids = []
         
         for sid in strategy_ids:
             try:
-                self.update_strategy_status(sid, 'running')
+                self.update_strategy_status(sid, 'running', user_id=user_id)
                 success_ids.append(sid)
             except Exception as e:
                 logger.error(f"Failed to start strategy {sid}: {e}")
@@ -676,14 +686,14 @@ class StrategyService:
             'failed_ids': failed_ids
         }
 
-    def batch_stop_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """Batch stop strategies"""
+    def batch_stop_strategies(self, strategy_ids: List[int], user_id: int = None) -> Dict[str, Any]:
+        """Batch stop strategies. If user_id is provided, verify ownership."""
         success_ids = []
         failed_ids = []
         
         for sid in strategy_ids:
             try:
-                self.update_strategy_status(sid, 'stopped')
+                self.update_strategy_status(sid, 'stopped', user_id=user_id)
                 success_ids.append(sid)
             except Exception as e:
                 logger.error(f"Failed to stop strategy {sid}: {e}")
@@ -695,14 +705,14 @@ class StrategyService:
             'failed_ids': failed_ids
         }
 
-    def batch_delete_strategies(self, strategy_ids: List[int]) -> Dict[str, Any]:
-        """Batch delete strategies"""
+    def batch_delete_strategies(self, strategy_ids: List[int], user_id: int = None) -> Dict[str, Any]:
+        """Batch delete strategies. If user_id is provided, verify ownership."""
         success_ids = []
         failed_ids = []
         
         for sid in strategy_ids:
             try:
-                self.delete_strategy(sid)
+                self.delete_strategy(sid, user_id=user_id)
                 success_ids.append(sid)
             except Exception as e:
                 logger.error(f"Failed to delete strategy {sid}: {e}")
@@ -714,15 +724,21 @@ class StrategyService:
             'failed_ids': failed_ids
         }
 
-    def get_strategies_by_group(self, strategy_group_id: str) -> List[Dict[str, Any]]:
-        """Get all strategies in a group"""
+    def get_strategies_by_group(self, strategy_group_id: str, user_id: int = None) -> List[Dict[str, Any]]:
+        """Get all strategies in a group. If user_id is provided, filter by user."""
         try:
             with get_db_connection() as db:
                 cur = db.cursor()
-                cur.execute(
-                    "SELECT id FROM qd_strategies_trading WHERE strategy_group_id = ?",
-                    (strategy_group_id,)
-                )
+                if user_id is not None:
+                    cur.execute(
+                        "SELECT id FROM qd_strategies_trading WHERE strategy_group_id = ? AND user_id = ?",
+                        (strategy_group_id, user_id)
+                    )
+                else:
+                    cur.execute(
+                        "SELECT id FROM qd_strategies_trading WHERE strategy_group_id = ?",
+                        (strategy_group_id,)
+                    )
                 rows = cur.fetchall() or []
                 cur.close()
             return [row['id'] for row in rows]
@@ -730,9 +746,8 @@ class StrategyService:
             logger.error(f"get_strategies_by_group failed: {e}")
             return []
 
-    def update_strategy(self, strategy_id: int, payload: Dict[str, Any]) -> bool:
-        now = int(time.time())
-        existing = self.get_strategy(strategy_id)
+    def update_strategy(self, strategy_id: int, payload: Dict[str, Any], user_id: int = None) -> bool:
+        existing = self.get_strategy(strategy_id, user_id=user_id)
         if not existing:
             return False
 
@@ -771,7 +786,7 @@ class StrategyService:
                     indicator_config = ?,
                     trading_config = ?,
                     ai_model_config = ?,
-                    updated_at = ?
+                    updated_at = NOW()
                 WHERE id = ?
                 """,
                 (
@@ -788,7 +803,6 @@ class StrategyService:
                     self._dump_json_or_encrypt(indicator_config, encrypt=False),
                     self._dump_json_or_encrypt(trading_config, encrypt=False),
                     self._dump_json_or_encrypt(ai_model_config, encrypt=False),
-                    now,
                     strategy_id
                 )
             )
@@ -796,11 +810,15 @@ class StrategyService:
             cur.close()
         return True
 
-    def delete_strategy(self, strategy_id: int) -> bool:
+    def delete_strategy(self, strategy_id: int, user_id: int = None) -> bool:
+        """Delete strategy. If user_id is provided, verify ownership."""
         try:
             with get_db_connection() as db:
                 cur = db.cursor()
-                cur.execute("DELETE FROM qd_strategies_trading WHERE id = ?", (strategy_id,))
+                if user_id is not None:
+                    cur.execute("DELETE FROM qd_strategies_trading WHERE id = ? AND user_id = ?", (strategy_id, user_id))
+                else:
+                    cur.execute("DELETE FROM qd_strategies_trading WHERE id = ?", (strategy_id,))
                 db.commit()
                 cur.close()
             return True
