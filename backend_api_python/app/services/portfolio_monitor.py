@@ -115,7 +115,7 @@ def _get_positions_for_monitor(position_ids: List[int] = None, user_id: int = No
             symbol = row.get('symbol')
             entry_price = float(row.get('entry_price') or 0)
             quantity = float(row.get('quantity') or 0)
-            side = row.get('side') or 'long',
+            side = row.get('side') or 'long'
             group_name = row.get('group_name')
             
             # Get current price (use realtime price API)
