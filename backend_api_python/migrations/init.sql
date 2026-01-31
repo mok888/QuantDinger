@@ -275,7 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON qd_strategy_notification
 -- 7. Indicator Codes
 -- =============================================================================
 
-CREATE TABLE public.qd_indicator_codes (
+CREATE TABLE IF NOT EXISTS qd_indicator_codes (
    id serial4 NOT NULL,
    user_id int4 DEFAULT 1 NOT NULL,
    is_buy int4 DEFAULT 0 NOT NULL,
@@ -302,9 +302,11 @@ CREATE TABLE public.qd_indicator_codes (
    reviewed_by int4 NULL,
    CONSTRAINT qd_indicator_codes_pkey PRIMARY KEY (id),
    CONSTRAINT qd_indicator_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES qd_users(id) ON DELETE CASCADE
+
 );
-CREATE INDEX idx_indicator_codes_user_id ON public.qd_indicator_codes USING btree (user_id);
-CREATE INDEX idx_indicator_review_status ON public.qd_indicator_codes USING btree (review_status);
+
+CREATE INDEX idx_indicator_codes_user_id ON qd_indicator_codes USING btree (user_id);
+CREATE INDEX idx_indicator_review_status ON qd_indicator_codes USING btree (review_status);
 
 -- =============================================================================
 -- 8. AI Decisions

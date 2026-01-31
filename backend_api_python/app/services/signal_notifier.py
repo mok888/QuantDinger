@@ -231,7 +231,6 @@ class SignalNotifier:
                 else:
                     ok, err = False, f"unsupported_channel:{c}"
             except Exception as e:
-                logger.error(rf'signal notify error: {traceback.format_exc()}')
                 ok, err = False, str(e)
 
             results[c] = {"ok": bool(ok), "error": (err or "")}
